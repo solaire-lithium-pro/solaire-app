@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Solaire Lithium Pro — Dimensionnement</title>
+<meta name="description" content="Application personnelle de dimensionnement solaire photovoltaïque autonome." />
+
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#0B1721" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Solaire Pro" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="icon" href="icon-192.png" />
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  html, body { background: #0B1721; margin: 0; }
+  #root { min-height: 100vh; }
+  @media print {
+    html, body { background: #fff; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+function Icon({ children, size = 16, color = "currentColor", className }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      {children}
+    </svg>
+  );
+}
+const Sun = (p) => <Icon {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></Icon>;
+const Battery = (p) => <Icon {...p}><rect x="2" y="7" width="17" height="10" rx="2" /><line x1="22" y1="11" x2="22" y2="13" /></Icon>;
+const Zap = (p) => <Icon {...p}><path d="M13 2 4 14h6l-1 8 9-12h-6z" /></Icon>;
+const Plug = (p) => <Icon {...p}><path d="M12 22v-5" /><path d="M9 8V2M15 8V2" /><path d="M7 8h10v4a5 5 0 0 1-10 0z" /></Icon>;
+const Cable = (p) => <Icon {...p}><path d="M4 4v6a4 4 0 0 0 4 4h8a4 4 0 0 0 4-4V4" /><path d="M4 4h4M16 4h4M12 14v8" /></Icon>;
+const Plus = (p) => <Icon {...p}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></Icon>;
+const Trash2 = (p) => <Icon {...p}><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" /><line x1="10" y1="10" x2="10" y2="16" /><line x1="14" y1="10" x2="14" y2="16" /></Icon>;
+const Info = (p) => <Icon {...p}><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></Icon>;
+const Gauge = (p) => <Icon {...p}><path d="M12 14 16 10" /><circle cx="12" cy="12" r="10" /></Icon>;
+const Lock = (p) => <Icon {...p}><rect x="4" y="11" width="16" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></Icon>;
+const Unlock = (p) => <Icon {...p}><rect x="4" y="11" width="16" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 7.5-2" /></Icon>;
+const Compass = (p) => <Icon {...p}><circle cx="12" cy="12" r="10" /><path d="m14.5 9.5-2 5-5 2 2-5z" /></Icon>;
+const Download = (p) => <Icon {...p}><path d="M12 3v12M7 10l5 5 5-5M4 21h16" /></Icon>;
+const ImageIcon = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-5-5L5 21" /></Icon>;
+
+
+
+const C = {
+  bg: "#0B1721",
+  panel: "#122430",
+  panel2: "#0F1F29",
+  border: "#1F3846",
+  amber: "#FFB238",
+  teal: "#33D6A6",
+  text: "#EAF2F5",
+  muted: "#7E96A3",
+  danger: "#FF6B6B",
+};
+const MONO = "ui-monospace, SFMono-Regular, 'IBM Plex Mono', Menlo, Consolas, monospace";
+const SANS = "ui-sans-serif, -apple-system, 'Segoe UI', Roboto, sans-serif";
+
+const REGULATOR_SIZES = [10, 15, 20, 30, 40, 50, 60, 80, 100];
+const CABLE_SIZES = [1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95];
+const BREAKER_SIZES = [2, 4, 6, 10, 13, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125];
+
+// Valeurs indicatives d'irradiation moyenne annuelle (HSP, kWh/m²/j) — moyennes nationales approximatives.
+// Fortes variations possibles selon la région exacte : à confirmer via PVGIS / NASA POWER / Global Solar Atlas.
+const REGIONS = {
+  "Afrique": [
+    ["Bénin", 5.0], ["Nigeria", 5.0], ["Togo", 4.9], ["Ghana", 5.0], ["Côte d'Ivoire", 4.8],
+    ["Sénégal", 5.5], ["Mali", 5.8], ["Burkina Faso", 5.6], ["Niger", 6.0], ["Cameroun", 4.6],
+    ["RD Congo", 4.4], ["Kenya", 5.5], ["Éthiopie", 5.6], ["Tanzanie", 5.4], ["Maroc", 5.3],
+    ["Algérie", 5.9], ["Tunisie", 5.4], ["Égypte", 6.1], ["Afrique du Sud", 5.3], ["Madagascar", 5.1],
+  ],
+  "Europe": [
+    ["France", 3.6], ["Espagne", 4.7], ["Portugal", 4.9], ["Italie", 4.2], ["Allemagne", 3.0],
+    ["Royaume-Uni", 2.8], ["Belgique", 2.9], ["Pays-Bas", 2.9], ["Grèce", 4.6], ["Pologne", 2.9],
+    ["Suède", 2.7], ["Norvège", 2.5], ["Suisse", 3.3], ["Roumanie", 3.5], ["Turquie", 4.3],
+  ],
+  "Asie": [
+    ["Arabie Saoudite", 6.0], ["Émirats Arabes Unis", 5.9], ["Inde", 5.3], ["Chine", 3.9], ["Japon", 3.5],
+    ["Corée du Sud", 3.3], ["Indonésie", 4.5], ["Thaïlande", 4.7], ["Vietnam", 4.4], ["Pakistan", 5.3],
+    ["Philippines", 4.5], ["Malaisie", 4.2], ["Iran", 5.2],
+  ],
+  "Amérique": [
+    ["États-Unis", 4.7], ["Canada", 3.2], ["Mexique", 5.5], ["Brésil", 5.0], ["Argentine", 4.8],
+    ["Chili", 5.6], ["Colombie", 4.5], ["Pérou", 5.3], ["Bolivie", 5.5],
+  ],
+  "Océanie": [
+    ["Australie", 5.6], ["Nouvelle-Zélande", 3.8],
+  ],
+};
+
+function fmt(n, d = 0) {
+  if (!isFinite(n) || isNaN(n)) return "—";
+  return n.toLocaleString("fr-FR", { maximumFractionDigits: d, minimumFractionDigits: d });
+}
+function pickStandard(list, value) {
+  const f = list.find((v) => v >= value);
+  return f !== undefined ? f : list[list.length - 1];
+}
+// Générateur PDF minimal, 100% JS natif (aucune dépendance, aucun réseau) — compatible navigateur.
+function escPdfText(s) {
+  return String(s).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+function sanitizeForPdf(str) {
+  return String(str)
+    .replace(/[\u202f\u00a0]/g, " ")
+    .replace(/\u0394/g, "d")
+    .replace(/\u221a3/g, "1.732")
+    .replace(/\u221a/g, "sqrt")
+    .replace(/\u03a9/g, "Ohms")
+    .replace(/\u2265/g, ">=")
+    .replace(/\u2264/g, "<=")
+    .replace(/\u2192/g, "->")
+    .replace(/\u2248/g, "~")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u2014\u2013]/g, "-")
+    .replace(/\u2026/g, "...")
+    .split("")
+    .map((ch) => (ch.charCodeAt(0) <= 0xff ? ch : "?"))
+    .join("");
+}
+function strToBytes(str) {
+  const bytes = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff;
+  return bytes;
+}
+function concatBytes(arrays) {
+  let total = 0;
+  for (const a of arrays) total += a.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const a of arrays) { out.set(a, off); off += a.length; }
+  return out;
+}
+
+function createPdfDoc() {
+  const PAGE_W = 595.28, PAGE_H = 841.89;
+  const MARGIN = 48;
+  const lineHeight = 13;
+  let pages = [];
+  let cur = [];
+  let y = PAGE_H - MARGIN;
+
+  function newPage() {
+    if (cur.length) pages.push(cur);
+    cur = [];
+    y = PAGE_H - MARGIN;
+  }
+  function ensureSpace(need) {
+    if (y - need < MARGIN) newPage();
+  }
+  function text(x, str, opts = {}) {
+    const size = opts.size || 9.5;
+    const font = opts.bold ? "/F2" : "/F1";
+    const color = opts.color || [0.07, 0.09, 0.1];
+    const lh = opts.lh || lineHeight;
+    ensureSpace(lh);
+    cur.push(`${color[0]} ${color[1]} ${color[2]} rg`);
+    cur.push(`BT ${font} ${size} Tf ${x} ${y} Td (${escPdfText(sanitizeForPdf(str))}) Tj ET`);
+    y -= lh;
+  }
+  function row(cols, opts = {}) {
+    const lh = opts.lh || lineHeight;
+    ensureSpace(lh);
+    const size = opts.size || 9.5;
+    const color = opts.color || [0.07, 0.09, 0.1];
+    cols.forEach((c) => {
+      const font = c.bold ? "/F2" : "/F1";
+      cur.push(`${color[0]} ${color[1]} ${color[2]} rg`);
+      cur.push(`BT ${font} ${c.size || size} Tf ${c.x} ${y} Td (${escPdfText(sanitizeForPdf(c.text))}) Tj ET`);
+    });
+    y -= lh;
+  }
+  function hr() {
+    ensureSpace(8);
+    const yy = y + 4;
+    cur.push(`0.6 0.6 0.6 RG 0.6 w ${MARGIN} ${yy} m ${PAGE_W - MARGIN} ${yy} l S`);
+    y -= 6;
+  }
+  function space(px) {
+    y -= px;
+    if (y < MARGIN) newPage();
+  }
+  function getY() { return y; }
+  function pageWidth() { return PAGE_W; }
+  function margin() { return MARGIN; }
+  function willFit(need) { return (y - need) >= MARGIN; }
+
+  function build() {
+    if (cur.length) pages.push(cur);
+    const catalogNum = 1, pagesNum = 2, fontRegNum = 3, fontBoldNum = 4;
+    let nextNum = 5;
+    const pageNums = [], contentNums = [], pageStreams = [];
+
+    pages.forEach((ops) => {
+      const pNum = nextNum++;
+      const cNum = nextNum++;
+      pageNums.push(pNum);
+      contentNums.push(cNum);
+      pageStreams.push(ops.join("\n") + "\n");
+    });
+
+    const objs = [];
+    objs[catalogNum - 1] = `<< /Type /Catalog /Pages ${pagesNum} 0 R >>`;
+    objs[pagesNum - 1] = `<< /Type /Pages /Kids [${pageNums.map((n) => n + " 0 R").join(" ")}] /Count ${pageNums.length} >>`;
+    objs[fontRegNum - 1] = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>`;
+    objs[fontBoldNum - 1] = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>`;
+    pageNums.forEach((pNum, i) => {
+      const cNum = contentNums[i];
+      objs[pNum - 1] = `<< /Type /Page /Parent ${pagesNum} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources << /Font << /F1 ${fontRegNum} 0 R /F2 ${fontBoldNum} 0 R >> >> /Contents ${cNum} 0 R >>`;
+      objs[cNum - 1] = { stream: strToBytes(pageStreams[i]) };
+    });
+
+    const chunks = [strToBytes("%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n")];
+    let pos = chunks[0].length;
+    const xref = [0];
+    for (let i = 0; i < objs.length; i++) {
+      xref.push(pos);
+      const num = i + 1;
+      const content = objs[i];
+      let buf;
+      if (content && content.stream) {
+        const header = strToBytes(`${num} 0 obj\n<< /Length ${content.stream.length} >>\nstream\n`);
+        const footer = strToBytes(`\nendstream\nendobj\n`);
+        buf = concatBytes([header, content.stream, footer]);
+      } else {
+        buf = strToBytes(`${num} 0 obj\n${content}\nendobj\n`);
+      }
+      chunks.push(buf);
+      pos += buf.length;
+    }
+    const xrefStart = pos;
+    let xrefStr = `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+    for (let i = 1; i <= objs.length; i++) {
+      xrefStr += `${String(xref[i]).padStart(10, "0")} 00000 n \n`;
+    }
+    const trailer = `trailer\n<< /Size ${objs.length + 1} /Root ${catalogNum} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+    chunks.push(strToBytes(xrefStr + trailer));
+    return concatBytes(chunks);
+  }
+
+  return { text, row, hr, space, newPage, build, getY, pageWidth, margin, willFit };
+}
+
+function Field({ label, hint, children }) {
+  return (
+    <label className="block">
+      <div className="flex items-baseline justify-between mb-1">
+        <span style={{ color: C.muted, fontFamily: SANS }} className="text-[11px] uppercase tracking-wider">{label}</span>
+        {hint && <span style={{ color: C.muted, fontFamily: MONO }} className="text-[10px]">{hint}</span>}
+      </div>
+      {children}
+    </label>
+  );
+}
+function NumInput({ value, onChange, step = 1, min = 0, suffix }) {
+  return (
+    <div className="flex items-center rounded-md px-2 py-1.5" style={{ background: C.panel2, border: `1px solid ${C.border}` }}>
+      <input type="number" value={value} step={step} min={min}
+        onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+        className="w-full bg-transparent outline-none text-sm" style={{ color: C.text, fontFamily: MONO }} />
+      {suffix && <span style={{ color: C.muted, fontFamily: MONO }} className="text-[11px] pl-1 whitespace-nowrap">{suffix}</span>}
+    </div>
+  );
+}
+function TextInput({ value, onChange, mono }) {
+  return (
+    <input value={value} onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-md px-2 py-1.5 text-sm outline-none"
+      style={{ background: C.panel2, border: `1px solid ${C.border}`, color: C.text, fontFamily: mono ? MONO : SANS }} />
+  );
+}
+function Select({ value, onChange, options, labels }) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-md px-2 py-1.5 text-sm outline-none"
+      style={{ background: C.panel2, border: `1px solid ${C.border}`, color: C.text, fontFamily: MONO }}>
+      {options.map((o, i) => <option key={o} value={o} style={{ background: C.panel2 }}>{labels ? labels[i] : o}</option>)}
+    </select>
+  );
+}
+function Section({ n, title, subtitle, children, accent }) {
+  return (
+    <section className="mb-6">
+      <div className="flex items-baseline gap-3 mb-3">
+        <span style={{ color: accent || C.amber, fontFamily: MONO, borderColor: C.border }} className="text-xs border rounded px-1.5 py-0.5">{n}</span>
+        <h2 style={{ color: C.text, fontFamily: SANS }} className="text-base font-semibold tracking-tight">{title}</h2>
+      </div>
+      {subtitle && <p style={{ color: C.muted, fontFamily: SANS }} className="text-xs mb-3 -mt-2">{subtitle}</p>}
+      <div className="rounded-xl p-4" style={{ background: C.panel, border: `1px solid ${C.border}` }}>{children}</div>
+    </section>
+  );
+}
+function Stat({ icon: Icon, label, value, unit, accent }) {
+  return (
+    <div className="rounded-lg p-3 flex-1 min-w-[130px]" style={{ background: C.panel2, border: `1px solid ${C.border}` }}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <Icon size={13} color={accent || C.amber} />
+        <span style={{ color: C.muted, fontFamily: SANS }} className="text-[10px] uppercase tracking-wider">{label}</span>
+      </div>
+      <div style={{ color: C.text, fontFamily: MONO }} className="text-lg font-semibold leading-none">
+        {value}<span style={{ color: C.muted }} className="text-xs ml-1">{unit}</span>
+      </div>
+    </div>
+  );
+}
+function Formula({ label, formula, sub, result, unit, accent }) {
+  return (
+    <div className="py-2" style={{ borderTop: `1px dashed ${C.border}` }}>
+      <div style={{ color: C.text, fontFamily: SANS }} className="text-xs font-medium mb-1">{label}</div>
+      <div style={{ color: C.muted, fontFamily: MONO }} className="text-[11px] leading-relaxed">{formula}</div>
+      <div style={{ color: C.muted, fontFamily: MONO }} className="text-[11px] leading-relaxed">{sub}</div>
+      <div style={{ color: accent || C.amber, fontFamily: MONO }} className="text-sm font-bold mt-0.5">= {result} {unit}</div>
+    </div>
+  );
+}
+function ProtectionRow({ label, formula, sub, result, unit, note, accent }) {
+  return (
+    <div className="py-2" style={{ borderTop: `1px dashed ${C.border}` }}>
+      <div style={{ color: C.text, fontFamily: SANS }} className="text-xs font-medium mb-1">{label}</div>
+      {formula && <div style={{ color: C.muted, fontFamily: MONO }} className="text-[11px] leading-relaxed">{formula}</div>}
+      {sub && <div style={{ color: C.muted, fontFamily: MONO }} className="text-[11px] leading-relaxed">{sub}</div>}
+      {result && <div style={{ color: accent || C.amber, fontFamily: MONO }} className="text-sm font-bold mt-0.5">= {result} {unit}</div>}
+      {note && <div style={{ color: C.teal, fontFamily: SANS }} className="text-[11px] mt-1 leading-relaxed">{note}</div>}
+    </div>
+  );
+}
+
+function PrintReport(p) {
+  const th = { textAlign: "left", padding: "4px 6px", borderBottom: "1px solid #999", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.4 };
+  const td = { padding: "4px 6px", borderBottom: "1px solid #ddd", fontSize: 11 };
+  return (
+    <div id="print-report" className="print-only" style={{ background: "#fff", color: "#111", fontFamily: SANS, padding: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "2px solid #111", paddingBottom: 10, marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {p.logo && <img src={p.logo} alt="logo" style={{ height: 48, maxWidth: 140, objectFit: "contain" }} />}
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700 }}>{p.brand}</div>
+            <div style={{ fontSize: 10, color: "#555" }}>Fiche de dimensionnement solaire</div>
+          </div>
+        </div>
+        <div style={{ textAlign: "right", fontSize: 10, color: "#555" }}>Édité le {p.dateStr}</div>
+      </div>
+
+      {(p.clientName || p.projectAddress) && (
+        <div style={{ fontSize: 11, marginBottom: 14 }}>
+          {p.clientName && <div><b>Client :</b> {p.clientName}</div>}
+          {p.projectAddress && <div><b>Projet / adresse :</b> {p.projectAddress}</div>}
+          <div><b>Localisation :</b> {p.country}, {p.continent}</div>
+        </div>
+      )}
+
+      <div style={{ fontSize: 12, fontWeight: 700, margin: "12px 0 6px" }}>Charges à alimenter</div>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10 }}>
+        <thead><tr><th style={th}>Appareil</th><th style={th}>P (W)</th><th style={th}>Qté</th><th style={th}>h/j</th><th style={th}>Wh/j</th></tr></thead>
+        <tbody>
+          {p.loads.map((l) => (
+            <tr key={l.id}><td style={td}>{l.name}</td><td style={td}>{l.power}</td><td style={td}>{l.qty}</td><td style={td}>{l.hours}</td><td style={td}>{fmt(l.power * l.qty * l.hours)}</td></tr>
+          ))}
+          <tr><td style={{ ...td, fontWeight: 700 }}>Total</td><td style={td}></td><td style={td}></td><td style={td}></td><td style={{ ...td, fontWeight: 700 }}>{fmt(p.calc.dailyEnergyWh)} Wh/j</td></tr>
+        </tbody>
+      </table>
+
+      <div style={{ fontSize: 12, fontWeight: 700, margin: "12px 0 6px" }}>Paramètres retenus</div>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10 }}>
+        <tbody>
+          <tr><td style={td}>Irradiation (HSP) / correction inclinaison</td><td style={{ ...td, textAlign: "right" }}>{p.hsp} kWh/m²/j × {p.tiltCorrection}% = {fmt(p.calc.effHsp, 2)} kWh/m²/j</td></tr>
+          <tr><td style={td}>Latitude / inclinaison conseillée / orientation</td><td style={{ ...td, textAlign: "right" }}>{p.latitude}° · {p.recommendedTilt}° · face au {p.orientation}</td></tr>
+          <tr><td style={td}>Tension système</td><td style={{ ...td, textAlign: "right" }}>{p.systemVoltage} V</td></tr>
+          <tr><td style={td}>Autonomie</td><td style={{ ...td, textAlign: "right" }}>{p.autonomyDays} j</td></tr>
+          <tr><td style={td}>Décharge max (DOD) / rendement système</td><td style={{ ...td, textAlign: "right" }}>{p.dod}% / {p.efficiency}%</td></tr>
+          <tr><td style={td}>Panneau retenu</td><td style={{ ...td, textAlign: "right" }}>{p.panelWp} Wc — {p.panelVoltage} V</td></tr>
+          <tr><td style={td}>Batterie retenue</td><td style={{ ...td, textAlign: "right" }}>{p.batteryAh} Ah — {p.batteryVoltage} V</td></tr>
+        </tbody>
+      </table>
+
+      <div style={{ fontSize: 12, fontWeight: 700, margin: "12px 0 6px" }}>Résultats du dimensionnement</div>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10 }}>
+        <thead><tr><th style={th}>Élément</th><th style={th}>Formule</th><th style={th}>Résultat</th></tr></thead>
+        <tbody>
+          <tr><td style={td}>Puissance crête</td><td style={{ ...td, fontFamily: MONO }}>Pc = (Ec'×Ks)/HSPeff</td><td style={{ ...td, fontWeight: 700 }}>{fmt(p.calc.peakWp)} Wc</td></tr>
+          <tr><td style={td}>Panneaux</td><td style={{ ...td, fontFamily: MONO }}>Np = Pc / Wc_unitaire</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.totalPanels} ({p.calc.panelsSeries}S × {p.calc.panelsParallel}P)</td></tr>
+          <tr><td style={td}>Capacité batterie</td><td style={{ ...td, fontFamily: MONO }}>Cbat = (Ec'×N)/(Usys×DOD)</td><td style={{ ...td, fontWeight: 700 }}>{fmt(p.calc.battCapTotalAh)} Ah</td></tr>
+          <tr><td style={td}>Batteries</td><td style={{ ...td, fontFamily: MONO }}>Nbat = Ns × Npar</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.totalBatteries} ({p.calc.battSeries}S × {p.calc.battParallel}P)</td></tr>
+          <tr><td style={td}>Régulateur</td><td style={{ ...td, fontFamily: MONO }}>Ireg = (Pc×marge)/Usys</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.regulator} A</td></tr>
+          <tr><td style={td}>Onduleur</td><td style={{ ...td, fontFamily: MONO }}>Pond = Pmax×marge</td><td style={{ ...td, fontWeight: 700 }}>{fmt(p.calc.inverterVA)} VA</td></tr>
+          <tr><td style={td}>Câble PV → régulateur</td><td style={{ ...td, fontFamily: MONO }}>S = (2LI)/(56ΔU)</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.sectionPV} mm²</td></tr>
+          <tr><td style={td}>Câble batterie → onduleur</td><td style={{ ...td, fontFamily: MONO }}>S = (2LI)/(56ΔU)</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.sectionBatt} mm²</td></tr>
+        </tbody>
+      </table>
+
+      <div style={{ fontSize: 12, fontWeight: 700, margin: "12px 0 6px" }}>Protections & sécurité</div>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10 }}>
+        <thead><tr><th style={th}>Organe</th><th style={th}>Valeur retenue</th><th style={th}>Type / caractéristiques</th></tr></thead>
+        <tbody>
+          <tr><td style={td}>Fusible de chaîne DC</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.panelsParallel > 1 ? `${p.calc.stringFuseStd} A` : "N/A"}</td><td style={td}>{p.calc.panelsParallel > 1 ? "gPV, 1 par chaîne" : "Non requis (1 seule chaîne)"}</td></tr>
+          <tr><td style={td}>Sectionneur/disjoncteur DC général</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.mainDCStd} A / {fmt(p.calc.vocStringTotal)} V</td><td style={td}>Bipolaire DC, coupure en charge</td></tr>
+          <tr><td style={td}>Disjoncteur DC charge (régulateur→batterie)</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.chargeBreakerStd} A</td><td style={td}>DC dédié</td></tr>
+          <tr><td style={td}>Disjoncteur/sectionneur DC décharge (batterie→onduleur)</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.dischargeBreakerStd} A</td><td style={td}>Coupure de proximité batterie</td></tr>
+          <tr><td style={td}>Parafoudre DC</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.spdType}</td><td style={td}>Uc ≥ 1.2×Voc_total</td></tr>
+          <tr><td style={td}>Disjoncteur AC (sortie onduleur)</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.acBreakerStd} A</td><td style={td}>Courbe C + différentiel 30mA type A/B</td></tr>
+          <tr><td style={td}>Interrupteur-sectionneur AC général</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.acBreakerStd} A</td><td style={td}>Cadenassable, coupure visible</td></tr>
+          <tr><td style={td}>Parafoudre AC</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.spdType}</td><td style={td}>Uc ≥ 1.1×Un</td></tr>
+          <tr><td style={td}>Mise à la terre</td><td style={{ ...td, fontWeight: 700 }}>{p.calc.earthSectionStd} mm² · ≤10 Ω</td><td style={td}>Cuivre, liaison équipotentielle des masses</td></tr>
+          <tr><td style={td}>Coffrets DC / AC</td><td style={{ ...td, fontWeight: 700 }}>—</td><td style={td}>IP65 (DC) / IP54-65 (AC)</td></tr>
+        </tbody>
+      </table>
+
+      <p style={{ fontSize: 9, color: "#777", marginTop: 16 }}>
+        Document généré par {p.brand}. Formules standards de dimensionnement PV autonome ; valeurs à confirmer sur site avant installation.
+      </p>
+    </div>
+  );
+}
+
+function SolarSizer() {
+  // Marque & accès (vendeur)
+  const [brand, setBrand] = React.useState("Solaire Lithium Pro");
+  const [paywallEnabled, setPaywallEnabled] = React.useState(false);
+  const [accessCode, setAccessCode] = React.useState("SOLAIRE2026");
+  const [purchaseLink, setPurchaseLink] = React.useState("https://snfjagmk.mychariow.com");
+  const [enteredCode, setEnteredCode] = React.useState("");
+  const unlocked = !paywallEnabled || enteredCode.trim().toUpperCase() === accessCode.trim().toUpperCase();
+  const [logo, setLogo] = React.useState(null);
+  const [clientName, setClientName] = React.useState("");
+  const [projectAddress, setProjectAddress] = React.useState("");
+  const dateStr = new Date().toLocaleDateString("fr-FR");
+  const handleLogoUpload = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setLogo(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const [pdfLoading, setPdfLoading] = React.useState(false);
+  const [pdfError, setPdfError] = React.useState("");
+
+  const handleDownloadPdf = () => {
+    setPdfError("");
+    setPdfLoading(true);
+    try {
+      const doc = createPdfDoc();
+      const M = doc.margin();
+      const PW = doc.pageWidth();
+
+      // En-tête
+      doc.text(M, brand || "Dimensionnement solaire", { size: 16, bold: true, lh: 20 });
+      doc.text(M, "Fiche de dimensionnement solaire", { size: 9, color: [0.35, 0.4, 0.45] });
+      doc.text(PW - M - 140, "Edite le " + dateStr, { size: 8.5, color: [0.5, 0.5, 0.5] });
+      doc.space(4);
+      doc.hr();
+      doc.space(4);
+      if (clientName) doc.text(M, "Client : " + clientName, { size: 10 });
+      if (projectAddress) doc.text(M, "Projet / adresse : " + projectAddress, { size: 10 });
+      doc.text(M, "Localisation : " + country + ", " + continent, { size: 10 });
+      doc.space(8);
+
+      // Charges
+      doc.text(M, "Charges a alimenter", { size: 12, bold: true, lh: 16 });
+      const c1 = M, c2 = M + 230, c3 = M + 300, c4 = M + 350, c5 = M + 410;
+      doc.row([
+        { x: c1, text: "Appareil", bold: true }, { x: c2, text: "P (W)", bold: true },
+        { x: c3, text: "Qte", bold: true }, { x: c4, text: "h/j", bold: true }, { x: c5, text: "Wh/j", bold: true },
+      ]);
+      doc.hr();
+      loads.forEach((l) => {
+        doc.row([
+          { x: c1, text: l.name }, { x: c2, text: String(l.power) }, { x: c3, text: String(l.qty) },
+          { x: c4, text: String(l.hours) }, { x: c5, text: fmt(l.power * l.qty * l.hours) },
+        ]);
+      });
+      doc.hr();
+      doc.row([{ x: c1, text: "Total", bold: true }, { x: c5, text: fmt(calc.dailyEnergyWh) + " Wh/j", bold: true }]);
+      doc.space(10);
+
+      // Paramètres
+      doc.text(M, "Parametres retenus", { size: 12, bold: true, lh: 16 });
+      const pRows = [
+        ["Irradiation (HSP) / correction inclinaison", `${hsp} kWh/m2/j x ${tiltCorrection}% = ${fmt(calc.effHsp, 2)} kWh/m2/j`],
+        ["Latitude / inclinaison conseillee / orientation", `${latitude} deg - ${recommendedTilt} deg - face au ${orientation}`],
+        ["Tension systeme", `${systemVoltage} V`],
+        ["Autonomie", `${autonomyDays} j`],
+        ["Decharge max (DOD) / rendement systeme", `${dod}% / ${efficiency}%`],
+        ["Panneau retenu", `${panelWp} Wc - ${panelVoltage} V - Isc ${panelIsc}A - Voc ${panelVoc}V`],
+        ["Batterie retenue", `${batteryAh} Ah - ${batteryVoltage} V`],
+      ];
+      pRows.forEach((r) => doc.row([{ x: c1, text: r[0] }, { x: M + 320, text: r[1] }]));
+      doc.space(10);
+
+      // Résultats
+      doc.text(M, "Resultats du dimensionnement", { size: 12, bold: true, lh: 16 });
+      const rRows = [
+        ["Puissance crete", "Pc = (Ec'xKs)/HSPeff", fmt(calc.peakWp) + " Wc"],
+        ["Panneaux", "Np = Pc/Wc_unitaire", `${calc.totalPanels} (${calc.panelsSeries}S x ${calc.panelsParallel}P)`],
+        ["Capacite batterie", "Cbat = (Ec'xN)/(UsysxDOD)", fmt(calc.battCapTotalAh) + " Ah"],
+        ["Batteries", "Nbat = Ns x Npar", `${calc.totalBatteries} (${calc.battSeries}S x ${calc.battParallel}P)`],
+        ["Regulateur", "Ireg = (Pcxmarge)/Usys", calc.regulator + " A"],
+        ["Onduleur", "Pond = Pmax_simultanee x marge", fmt(calc.inverterVA) + " VA"],
+        ["Cable PV -> regulateur", "S = (2LI)/(56.dU)", calc.sectionPV + " mm2"],
+        ["Cable batterie -> onduleur", "S = (2LI)/(56.dU)", calc.sectionBatt + " mm2"],
+      ];
+      rRows.forEach((r) => doc.row([
+        { x: c1, text: r[0], bold: true }, { x: c1 + 150, text: r[1], size: 8.5, color: [0.4, 0.45, 0.5] }, { x: c1 + 340, text: r[2], bold: true },
+      ]));
+      doc.space(10);
+
+      // Protections
+      doc.text(M, "Protections et securite", { size: 12, bold: true, lh: 16 });
+      const protRows = [
+        ["Fusible de chaine DC", calc.panelsParallel > 1 ? calc.stringFuseStd + " A" : "N/A", calc.panelsParallel > 1 ? "gPV, 1 par chaine" : "Non requis (1 chaine)"],
+        ["Sectionneur/disjoncteur DC general", `${calc.mainDCStd} A / ${fmt(calc.vocStringTotal)} V`, "Bipolaire DC, coupure en charge"],
+        ["Disjoncteur DC charge (regulateur->batterie)", calc.chargeBreakerStd + " A", "DC dedie"],
+        ["Disjoncteur/sectionneur DC decharge (batterie->onduleur)", calc.dischargeBreakerStd + " A", "Coupure de proximite batterie"],
+        ["Parafoudre DC", calc.spdType, "Uc >= 1.2 x Voc_total"],
+        ["Disjoncteur AC (sortie onduleur)", calc.acBreakerStd + " A", "Courbe C + differentiel 30mA type A/B"],
+        ["Interrupteur-sectionneur AC general", calc.acBreakerStd + " A", "Cadenassable, coupure visible"],
+        ["Parafoudre AC", calc.spdType, "Uc >= 1.1 x Un"],
+        ["Mise a la terre", calc.earthSectionStd + " mm2 - <=10 Ohms", "Cuivre, liaison equipotentielle des masses"],
+        ["Coffrets DC / AC", "-", "IP65 (DC) / IP54-65 (AC)"],
+      ];
+      protRows.forEach((r) => {
+        doc.row([{ x: c1, text: r[0], bold: true }]);
+        doc.row([{ x: c1 + 10, text: r[1], color: [0.75, 0.55, 0.1] }, { x: c1 + 150, text: r[2], size: 8.5, color: [0.1, 0.55, 0.45] }]);
+      });
+      doc.space(12);
+      doc.hr();
+      doc.text(M, `Document genere par ${brand || "Dimensionnement solaire"}. Formules standards de dimensionnement PV autonome ; valeurs a confirmer sur site avant installation.`, { size: 7.5, color: [0.5, 0.5, 0.5] });
+
+      const bytes = doc.build();
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const fileName = (brand || "dimensionnement-solaire").trim().replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${fileName || "dimensionnement-solaire"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch (err) {
+      setPdfError("La generation du PDF a echoue (" + (err && err.message ? err.message : "erreur inconnue") + "). Utilise le bouton \u00ab Apercu a imprimer \u00bb ci-dessous en repli.");
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  // Charges
+  const [loads, setLoads] = React.useState([
+    { id: 1, name: "Ampoule LED", power: 10, qty: 4, hours: 5 },
+    { id: 2, name: "Réfrigérateur", power: 150, qty: 1, hours: 8 },
+    { id: 3, name: "Télévision", power: 80, qty: 1, hours: 4 },
+    { id: 4, name: "Ordinateur portable", power: 65, qty: 1, hours: 3 },
+  ]);
+  const [nextId, setNextId] = React.useState(5);
+
+  // Localisation & irradiation
+  const [continent, setContinent] = React.useState("Afrique");
+  const [country, setCountry] = React.useState("Bénin");
+  const [hsp, setHsp] = React.useState(5.0);
+  const [latitude, setLatitude] = React.useState(6.4);
+  const [tiltCorrection, setTiltCorrection] = React.useState(100);
+
+  // Système
+  const [systemVoltage, setSystemVoltage] = React.useState(24);
+  const [autonomyDays, setAutonomyDays] = React.useState(2);
+  const [dod, setDod] = React.useState(50);
+  const [efficiency, setEfficiency] = React.useState(80);
+  const [safetyFactor, setSafetyFactor] = React.useState(1.3);
+  const [panelWp, setPanelWp] = React.useState(300);
+  const [panelVoltage, setPanelVoltage] = React.useState(12);
+  const [batteryAh, setBatteryAh] = React.useState(200);
+  const [batteryVoltage, setBatteryVoltage] = React.useState(12);
+  const [inverterMargin, setInverterMargin] = React.useState(1.25);
+  const [regMargin, setRegMargin] = React.useState(1.25);
+  const [distPV, setDistPV] = React.useState(10);
+  const [distBatt, setDistBatt] = React.useState(2);
+  const [dropPct, setDropPct] = React.useState(3);
+
+  // Protections
+  const [panelIsc, setPanelIsc] = React.useState(9.5);
+  const [panelVoc, setPanelVoc] = React.useState(22);
+  const [vocColdFactor, setVocColdFactor] = React.useState(1.15);
+  const [acPhase, setAcPhase] = React.useState("mono");
+  const [highLightningRisk, setHighLightningRisk] = React.useState(false);
+
+  const countryOptions = REGIONS[continent].map((c) => c[0]);
+  const onContinentChange = (val) => {
+    setContinent(val);
+    const first = REGIONS[val][0];
+    setCountry(first[0]);
+    setHsp(first[1]);
+  };
+  const onCountryChange = (val) => {
+    setCountry(val);
+    const found = REGIONS[continent].find((c) => c[0] === val);
+    if (found) setHsp(found[1]);
+  };
+
+  const updateLoad = (id, key, val) => setLoads((ls) => ls.map((l) => (l.id === id ? { ...l, [key]: val } : l)));
+  const addLoad = () => { setLoads((ls) => [...ls, { id: nextId, name: "Nouvel appareil", power: 50, qty: 1, hours: 1 }]); setNextId((n) => n + 1); };
+  const removeLoad = (id) => setLoads((ls) => ls.filter((l) => l.id !== id));
+
+  const recommendedTilt = Math.round(Math.abs(latitude));
+  const orientation = latitude >= 0 ? "Sud" : "Nord";
+
+  const calc = React.useMemo(() => {
+    const dailyEnergyWh = loads.reduce((s, l) => s + l.power * l.qty * l.hours, 0);
+    const maxInstantW = loads.reduce((s, l) => s + l.power * l.qty, 0);
+    const correctedEnergyWh = dailyEnergyWh / (efficiency / 100 || 1);
+    const effHsp = hsp * (tiltCorrection / 100);
+
+    const peakWp = effHsp > 0 ? (correctedEnergyWh * safetyFactor) / effHsp : 0;
+    const numPanels = panelWp > 0 ? Math.ceil(peakWp / panelWp) : 0;
+    const panelsSeries = panelVoltage > 0 ? Math.max(1, Math.ceil(systemVoltage / panelVoltage)) : 1;
+    const panelsParallel = Math.max(1, Math.ceil(numPanels / panelsSeries));
+    const totalPanels = panelsSeries * panelsParallel;
+
+    const battCapTotalAh = systemVoltage > 0 && dod > 0 ? (correctedEnergyWh * autonomyDays) / (systemVoltage * (dod / 100)) : 0;
+    const battSeries = batteryVoltage > 0 ? Math.max(1, Math.ceil(systemVoltage / batteryVoltage)) : 1;
+    const battParallel = batteryAh > 0 ? Math.max(1, Math.ceil(battCapTotalAh / batteryAh)) : 1;
+    const totalBatteries = battSeries * battParallel;
+
+    const regCurrentRaw = systemVoltage > 0 ? (peakWp * regMargin) / systemVoltage : 0;
+    const regulator = pickStandard(REGULATOR_SIZES, regCurrentRaw);
+    const inverterVA = maxInstantW * inverterMargin;
+
+    const currentPV = regCurrentRaw;
+    const currentBatt = systemVoltage > 0 ? inverterVA / systemVoltage : 0;
+    const dU = (systemVoltage * dropPct) / 100;
+    const sectionPVraw = dU > 0 ? (2 * distPV * currentPV) / (56 * dU) : 0;
+    const sectionBattraw = dU > 0 ? (2 * distBatt * currentBatt) / (56 * dU) : 0;
+    const sectionPV = pickStandard(CABLE_SIZES, sectionPVraw);
+    const sectionBatt = pickStandard(CABLE_SIZES, sectionBattraw);
+
+    // --- Protections ---
+    const vocStringTotal = panelVoc * panelsSeries * vocColdFactor;
+    const iscTotalDC = panelIsc * panelsParallel;
+    const stringFuseCalc = 1.25 * panelIsc;
+    const stringFuseStd = pickStandard(BREAKER_SIZES, stringFuseCalc);
+    const mainDCCalc = 1.25 * iscTotalDC;
+    const mainDCStd = pickStandard(BREAKER_SIZES, mainDCCalc);
+    const chargeBreakerCalc = 1.25 * regulator;
+    const chargeBreakerStd = pickStandard(BREAKER_SIZES, chargeBreakerCalc);
+    const dischargeBreakerCalc = 1.25 * currentBatt;
+    const dischargeBreakerStd = pickStandard(BREAKER_SIZES, dischargeBreakerCalc);
+    const acLineVoltage = acPhase === "tri" ? 400 : 230;
+    const iAC = acPhase === "tri" ? inverterVA / (Math.sqrt(3) * 400) : inverterVA / 230;
+    const acBreakerCalc = 1.25 * iAC;
+    const acBreakerStd = pickStandard(BREAKER_SIZES, acBreakerCalc);
+    const maxActiveSection = Math.max(sectionPV, sectionBatt);
+    const earthSectionCalc = maxActiveSection <= 16 ? maxActiveSection : maxActiveSection <= 35 ? 16 : maxActiveSection / 2;
+    const earthSectionStd = pickStandard(CABLE_SIZES, earthSectionCalc);
+    const spdType = highLightningRisk ? "Type 1 + 2" : "Type 2";
+
+    return {
+      dailyEnergyWh, maxInstantW, correctedEnergyWh, effHsp, peakWp,
+      numPanels, panelsSeries, panelsParallel, totalPanels,
+      battCapTotalAh, battSeries, battParallel, totalBatteries,
+      regCurrentRaw, regulator, inverterVA, currentPV, currentBatt,
+      sectionPV, sectionPVraw, sectionBatt, sectionBattraw,
+      vocStringTotal, iscTotalDC, stringFuseCalc, stringFuseStd,
+      mainDCCalc, mainDCStd, chargeBreakerCalc, chargeBreakerStd,
+      dischargeBreakerCalc, dischargeBreakerStd, acLineVoltage, iAC, acBreakerCalc, acBreakerStd,
+      earthSectionCalc, earthSectionStd, spdType,
+    };
+  }, [loads, systemVoltage, autonomyDays, dod, efficiency, hsp, tiltCorrection, safetyFactor, panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin, distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk]);
+
+
+  // Sauvegarde locale (persistance entre les ouvertures de l'app sur le téléphone)
+  const STORAGE_KEY = "solar-sizer-data-v2";
+  const didLoad = React.useRef(false);
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const s = JSON.parse(raw);
+        if (s.brand !== undefined) setBrand(s.brand);
+        if (s.purchaseLink !== undefined) setPurchaseLink(s.purchaseLink);
+        if (s.logo !== undefined) setLogo(s.logo);
+        if (s.clientName !== undefined) setClientName(s.clientName);
+        if (s.projectAddress !== undefined) setProjectAddress(s.projectAddress);
+        if (s.paywallEnabled !== undefined) setPaywallEnabled(s.paywallEnabled);
+        if (s.accessCode !== undefined) setAccessCode(s.accessCode);
+        if (s.loads !== undefined) setLoads(s.loads);
+        if (s.nextId !== undefined) setNextId(s.nextId);
+        if (s.continent !== undefined) setContinent(s.continent);
+        if (s.country !== undefined) setCountry(s.country);
+        if (s.hsp !== undefined) setHsp(s.hsp);
+        if (s.latitude !== undefined) setLatitude(s.latitude);
+        if (s.tiltCorrection !== undefined) setTiltCorrection(s.tiltCorrection);
+        if (s.systemVoltage !== undefined) setSystemVoltage(s.systemVoltage);
+        if (s.autonomyDays !== undefined) setAutonomyDays(s.autonomyDays);
+        if (s.dod !== undefined) setDod(s.dod);
+        if (s.efficiency !== undefined) setEfficiency(s.efficiency);
+        if (s.safetyFactor !== undefined) setSafetyFactor(s.safetyFactor);
+        if (s.panelWp !== undefined) setPanelWp(s.panelWp);
+        if (s.panelVoltage !== undefined) setPanelVoltage(s.panelVoltage);
+        if (s.batteryAh !== undefined) setBatteryAh(s.batteryAh);
+        if (s.batteryVoltage !== undefined) setBatteryVoltage(s.batteryVoltage);
+        if (s.inverterMargin !== undefined) setInverterMargin(s.inverterMargin);
+        if (s.regMargin !== undefined) setRegMargin(s.regMargin);
+        if (s.distPV !== undefined) setDistPV(s.distPV);
+        if (s.distBatt !== undefined) setDistBatt(s.distBatt);
+        if (s.dropPct !== undefined) setDropPct(s.dropPct);
+        if (s.panelIsc !== undefined) setPanelIsc(s.panelIsc);
+        if (s.panelVoc !== undefined) setPanelVoc(s.panelVoc);
+        if (s.vocColdFactor !== undefined) setVocColdFactor(s.vocColdFactor);
+        if (s.acPhase !== undefined) setAcPhase(s.acPhase);
+        if (s.highLightningRisk !== undefined) setHighLightningRisk(s.highLightningRisk);
+      }
+    } catch (e) { /* ignore corrupted storage */ }
+    didLoad.current = true;
+  }, []);
+
+  React.useEffect(() => {
+    if (!didLoad.current) return;
+    const snapshot = {
+      brand, purchaseLink, logo, clientName, projectAddress, paywallEnabled, accessCode,
+      loads, nextId, continent, country, hsp, latitude, tiltCorrection,
+      systemVoltage, autonomyDays, dod, efficiency, safetyFactor,
+      panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin,
+      distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk,
+    };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot)); } catch (e) { /* quota ou logo trop lourd */ }
+  }, [brand, purchaseLink, logo, clientName, projectAddress, paywallEnabled, accessCode,
+      loads, nextId, continent, country, hsp, latitude, tiltCorrection,
+      systemVoltage, autonomyDays, dod, efficiency, safetyFactor,
+      panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin,
+      distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk]);
+
+  const printProps = {
+    brand, logo, clientName, projectAddress, dateStr, loads, calc, country, continent,
+    hsp, tiltCorrection, latitude, recommendedTilt, orientation,
+    systemVoltage, autonomyDays, dod, efficiency, panelWp, panelVoltage, batteryAh, batteryVoltage,
+    panelIsc, panelVoc, acPhase, highLightningRisk,
+  };
+
+  return (
+    <div style={{ background: C.bg, minHeight: "100%", fontFamily: SANS }} className="w-full p-4 sm:p-6">
+      <style>{`
+        .print-only { display: none; }
+        @media print {
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+        }
+      `}</style>
+      <PrintReport {...printProps} />
+      <div className="no-print">
+      {/* Header */}
+      <div className="mb-5">
+        <div style={{ color: C.amber, fontFamily: MONO }} className="text-[11px] uppercase tracking-[0.2em] mb-1">{brand} · Outil d'ingénierie</div>
+        <h1 style={{ color: C.text }} className="text-2xl font-bold tracking-tight">Dimensionnement Solaire</h1>
+        <p style={{ color: C.muted }} className="text-sm mt-1">
+          Valable pour n'importe quel pays et n'importe quelle charge. Choisis ta localisation, renseigne tes appareils : chaque résultat affiche sa formule et son calcul.
+        </p>
+      </div>
+
+      {/* 00. Marque & accès (vendeur) */}
+      <Section n="00" title="Marque & accès" subtitle="Réglages pour distribuer ou vendre cet outil." accent={C.teal}>
+        <div className="grid sm:grid-cols-2 gap-3 mb-3">
+          <Field label="Nom de la marque / du produit"><TextInput value={brand} onChange={setBrand} /></Field>
+          <Field label="Lien d'achat / boutique"><TextInput value={purchaseLink} onChange={setPurchaseLink} mono /></Field>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-3 mb-3">
+          <Field label="Logo de l'entreprise" hint="pour le PDF">
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md cursor-pointer" style={{ color: C.teal, border: `1px solid ${C.border}`, fontFamily: SANS }}>
+                <ImageIcon size={13} /> Choisir
+                <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
+              </label>
+              {logo && <img src={logo} alt="logo" className="h-8 rounded" style={{ background: "#fff", padding: 2 }} />}
+            </div>
+          </Field>
+          <Field label="Nom du client"><TextInput value={clientName} onChange={setClientName} /></Field>
+          <Field label="Adresse / projet"><TextInput value={projectAddress} onChange={setProjectAddress} /></Field>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button onClick={handleDownloadPdf} disabled={pdfLoading} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium disabled:opacity-60" style={{ color: C.bg, background: C.amber, fontFamily: SANS }}>
+            <Download size={13} /> {pdfLoading ? "Génération du PDF…" : "Télécharger le PDF"}
+          </button>
+          <button onClick={() => window.print()} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md" style={{ color: C.teal, border: `1px solid ${C.border}`, fontFamily: SANS }}>
+            Aperçu à imprimer
+          </button>
+          <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: C.text, fontFamily: SANS }}>
+            <input type="checkbox" checked={paywallEnabled} onChange={(e) => setPaywallEnabled(e.target.checked)} />
+            Activer le verrouillage payant (résultats masqués sans code)
+          </label>
+          {paywallEnabled && (
+            <div className="flex items-center gap-2">
+              <span style={{ color: C.muted, fontFamily: SANS }} className="text-xs">Code d'accès :</span>
+              <div style={{ width: 160 }}><TextInput value={accessCode} onChange={setAccessCode} mono /></div>
+            </div>
+          )}
+        </div>
+        {pdfError && (
+          <p style={{ color: C.danger, fontFamily: SANS }} className="text-[11px] mt-2">{pdfError}</p>
+        )}
+        <p style={{ color: C.muted, fontFamily: SANS }} className="text-[11px] mt-2 flex items-start gap-1.5">
+          <Info size={12} className="mt-0.5 shrink-0" />
+          Ce verrou masque le contenu côté client — pratique pour distribuer un fichier « démo » et livrer le code après achat (sur Chariow par exemple), mais il n'encaisse pas de paiement lui-même : il n'est pas infranchissable pour un utilisateur technique.
+        </p>
+      </Section>
+
+      {/* 01. Localisation */}
+      <Section n="01" title="Localisation & irradiation" subtitle="L'irradiation solaire (HSP) change selon le pays — et l'inclinaison/orientation du champ influence le rendement réel.">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+          <Field label="Continent">
+            <Select value={continent} onChange={onContinentChange} options={Object.keys(REGIONS)} />
+          </Field>
+          <Field label="Pays">
+            <Select value={country} onChange={onCountryChange} options={countryOptions} />
+          </Field>
+          <Field label="HSP (irradiation)" hint="kWh/m²/j — modifiable">
+            <NumInput value={hsp} onChange={setHsp} step={0.1} suffix="kWh/m²" />
+          </Field>
+          <Field label="Latitude du site" hint="° — ex. 6.4 pour Cotonou">
+            <NumInput value={latitude} onChange={setLatitude} step={0.1} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <Field label="Inclinaison optimale conseillée" hint="≈ latitude du site">
+            <div className="rounded-md px-2 py-1.5 text-sm" style={{ background: C.panel2, border: `1px solid ${C.border}`, color: C.teal, fontFamily: MONO }}>
+              {recommendedTilt}°
+            </div>
+          </Field>
+          <Field label="Orientation conseillée">
+            <div className="rounded-md px-2 py-1.5 text-sm flex items-center gap-1.5" style={{ background: C.panel2, border: `1px solid ${C.border}`, color: C.teal, fontFamily: MONO }}>
+              <Compass size={13} /> Face au {orientation}
+            </div>
+          </Field>
+          <Field label="Correction inclinaison/orientation" hint="100% = installation optimale">
+            <NumInput value={tiltCorrection} onChange={setTiltCorrection} suffix="%" />
+          </Field>
+        </div>
+        <p style={{ color: C.muted, fontFamily: SANS }} className="text-[11px] mt-3 flex items-start gap-1.5">
+          <Info size={12} className="mt-0.5 shrink-0" />
+          Le HSP par pays est une <b>moyenne nationale indicative</b> (fortes variations régionales possibles) — à affiner avec PVGIS, NASA POWER ou un service météorologique local. La règle « inclinaison ≈ latitude, panneaux face à l'équateur » est une approximation courante ; si ton installation s'en écarte, réduis le facteur de correction (ex. 90% pour une toiture mal orientée).
+        </p>
+      </Section>
+
+      {/* HERO */}
+      <div className="rounded-xl p-4 mb-6" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+        <svg viewBox="0 0 720 190" className="w-full h-auto">
+          <defs><style>{`.flow{stroke-dasharray:6 6;animation:dash 1.4s linear infinite}@keyframes dash{to{stroke-dashoffset:-24}}`}</style></defs>
+          <line x1="95" y1="95" x2="185" y2="95" stroke={C.amber} strokeWidth="2" className="flow" />
+          <line x1="255" y1="95" x2="345" y2="95" stroke={C.amber} strokeWidth="2" className="flow" />
+          <line x1="415" y1="95" x2="480" y2="95" stroke={C.teal} strokeWidth="2" className="flow" />
+          <line x1="480" y1="95" x2="480" y2="60" stroke={C.teal} strokeWidth="2" />
+          <line x1="480" y1="60" x2="555" y2="60" stroke={C.teal} strokeWidth="2" className="flow" />
+          <line x1="480" y1="95" x2="480" y2="130" stroke={C.teal} strokeWidth="2" />
+          <line x1="480" y1="130" x2="555" y2="130" stroke={C.teal} strokeWidth="2" className="flow" />
+          <line x1="625" y1="60" x2="690" y2="95" stroke={C.amber} strokeWidth="2" className="flow" />
+          <line x1="625" y1="130" x2="690" y2="95" stroke={C.amber} strokeWidth="2" className="flow" />
+          <g transform="translate(50,95)"><circle r="26" fill="none" stroke={C.amber} strokeWidth="2" /><Sun size={26} x="-13" y="-13" color={C.amber} /></g>
+          <g transform="translate(220,95)">
+            <rect x="-38" y="-30" width="76" height="60" rx="6" fill={C.panel2} stroke={C.amber} strokeWidth="1.5" />
+            <text x="0" y="-38" textAnchor="middle" fill={C.text} fontSize="11" fontFamily={SANS} fontWeight="600">Panneaux</text>
+            <text x="0" y="4" textAnchor="middle" fill={C.amber} fontSize="13" fontFamily={MONO} fontWeight="700">{fmt(calc.peakWp)} Wc</text>
+            <text x="0" y="20" textAnchor="middle" fill={C.muted} fontSize="10" fontFamily={MONO}>{calc.totalPanels}× {panelWp}Wc</text>
+          </g>
+          <g transform="translate(380,95)">
+            <rect x="-35" y="-30" width="70" height="60" rx="6" fill={C.panel2} stroke={C.teal} strokeWidth="1.5" />
+            <text x="0" y="-38" textAnchor="middle" fill={C.text} fontSize="11" fontFamily={SANS} fontWeight="600">Régulateur</text>
+            <text x="0" y="4" textAnchor="middle" fill={C.teal} fontSize="13" fontFamily={MONO} fontWeight="700">{calc.regulator} A</text>
+            <text x="0" y="20" textAnchor="middle" fill={C.muted} fontSize="10" fontFamily={MONO}>{fmt(calc.regCurrentRaw, 1)} A calc.</text>
+          </g>
+          <g transform="translate(555,60)">
+            <rect x="-38" y="-24" width="76" height="48" rx="6" fill={C.panel2} stroke={C.teal} strokeWidth="1.5" />
+            <text x="0" y="-30" textAnchor="middle" fill={C.text} fontSize="11" fontFamily={SANS} fontWeight="600">Batterie</text>
+            <text x="0" y="4" textAnchor="middle" fill={C.teal} fontSize="12" fontFamily={MONO} fontWeight="700">{fmt(calc.battCapTotalAh)} Ah</text>
+          </g>
+          <g transform="translate(555,130)">
+            <rect x="-38" y="-24" width="76" height="48" rx="6" fill={C.panel2} stroke={C.amber} strokeWidth="1.5" />
+            <text x="0" y="42" textAnchor="middle" fill={C.text} fontSize="11" fontFamily={SANS} fontWeight="600">Onduleur</text>
+            <text x="0" y="4" textAnchor="middle" fill={C.amber} fontSize="12" fontFamily={MONO} fontWeight="700">{fmt(calc.inverterVA)} VA</text>
+          </g>
+          <g transform="translate(690,95)">
+            <circle r="24" fill="none" stroke={C.amber} strokeWidth="2" /><Plug size={22} x="-11" y="-11" color={C.amber} />
+            <text x="0" y="42" textAnchor="middle" fill={C.muted} fontSize="10" fontFamily={MONO}>{fmt(calc.dailyEnergyWh)} Wh/j</text>
+          </g>
+        </svg>
+        <div className="flex flex-wrap gap-2 mt-3">
+          <Stat icon={Sun} label="Puissance crête" value={fmt(calc.peakWp)} unit="Wc" />
+          <Stat icon={Battery} label="Capacité batterie" value={fmt(calc.battCapTotalAh)} unit="Ah" accent={C.teal} />
+          <Stat icon={Gauge} label="Régulateur" value={calc.regulator} unit="A" accent={C.teal} />
+          <Stat icon={Zap} label="Onduleur" value={fmt(calc.inverterVA)} unit="VA" />
+        </div>
+      </div>
+
+      {/* 02. Charges */}
+      <Section n="02" title="Charges à alimenter" subtitle="Ajoute chaque appareil, sa puissance, sa quantité et sa durée d'utilisation quotidienne.">
+        <div className="overflow-x-auto -mx-1">
+          <table className="w-full text-sm min-w-[560px]">
+            <thead>
+              <tr style={{ color: C.muted, fontFamily: SANS }} className="text-[11px] uppercase tracking-wider text-left">
+                <th className="py-1 px-1 font-normal">Appareil</th>
+                <th className="py-1 px-1 font-normal">P (W)</th>
+                <th className="py-1 px-1 font-normal">Qté</th>
+                <th className="py-1 px-1 font-normal">h/j</th>
+                <th className="py-1 px-1 font-normal text-right">Wh/j</th>
+                <th className="py-1 px-1"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loads.map((l) => (
+                <tr key={l.id} style={{ borderTop: `1px solid ${C.border}` }}>
+                  <td className="py-1.5 px-1"><input value={l.name} onChange={(e) => updateLoad(l.id, "name", e.target.value)} className="w-full bg-transparent outline-none text-sm" style={{ color: C.text }} /></td>
+                  <td className="py-1.5 px-1 w-20"><input type="number" value={l.power} onChange={(e) => updateLoad(l.id, "power", parseFloat(e.target.value) || 0)} className="w-full bg-transparent outline-none text-sm" style={{ color: C.text, fontFamily: MONO }} /></td>
+                  <td className="py-1.5 px-1 w-14"><input type="number" value={l.qty} onChange={(e) => updateLoad(l.id, "qty", parseFloat(e.target.value) || 0)} className="w-full bg-transparent outline-none text-sm" style={{ color: C.text, fontFamily: MONO }} /></td>
+                  <td className="py-1.5 px-1 w-14"><input type="number" value={l.hours} onChange={(e) => updateLoad(l.id, "hours", parseFloat(e.target.value) || 0)} className="w-full bg-transparent outline-none text-sm" style={{ color: C.text, fontFamily: MONO }} /></td>
+                  <td className="py-1.5 px-1 text-right" style={{ color: C.amber, fontFamily: MONO }}>{fmt(l.power * l.qty * l.hours)}</td>
+                  <td className="py-1.5 px-1 text-right"><button onClick={() => removeLoad(l.id)} aria-label="Supprimer"><Trash2 size={15} color={C.danger} /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex items-center justify-between mt-3">
+          <button onClick={addLoad} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md" style={{ color: C.teal, border: `1px solid ${C.border}`, fontFamily: SANS }}>
+            <Plus size={13} /> Ajouter un appareil
+          </button>
+          <div style={{ fontFamily: MONO, color: C.text }} className="text-sm">
+            Total : <b style={{ color: C.amber }}>{fmt(calc.dailyEnergyWh)} Wh/j</b>
+            <span style={{ color: C.muted }}> · pointe {fmt(calc.maxInstantW)} W</span>
+          </div>
+        </div>
+      </Section>
+
+      {/* 03. Paramètres système */}
+      <Section n="03" title="Paramètres du système">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <Field label="Tension système"><Select value={systemVoltage} onChange={(v) => setSystemVoltage(parseFloat(v))} options={[12, 24, 48]} /></Field>
+          <Field label="Autonomie" hint="jours"><NumInput value={autonomyDays} onChange={setAutonomyDays} step={0.5} /></Field>
+          <Field label="Décharge max (DOD)" hint="50% Pb-acide · 80% Li-ion"><NumInput value={dod} onChange={setDod} suffix="%" /></Field>
+          <Field label="Rendement système" hint="câblage + régulateur + onduleur"><NumInput value={efficiency} onChange={setEfficiency} suffix="%" /></Field>
+          <Field label="Coeff. de sécurité panneaux"><NumInput value={safetyFactor} onChange={setSafetyFactor} step={0.05} /></Field>
+          <Field label="Marge régulateur"><NumInput value={regMargin} onChange={setRegMargin} step={0.05} /></Field>
+          <Field label="Marge onduleur"><NumInput value={inverterMargin} onChange={setInverterMargin} step={0.05} /></Field>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Field label="Panneau — Wc unitaire"><NumInput value={panelWp} onChange={setPanelWp} step={10} suffix="Wc" /></Field>
+          <Field label="Panneau — tension nominale"><Select value={panelVoltage} onChange={(v) => setPanelVoltage(parseFloat(v))} options={[12, 24]} /></Field>
+          <Field label="Batterie — capacité unitaire"><NumInput value={batteryAh} onChange={setBatteryAh} step={10} suffix="Ah" /></Field>
+          <Field label="Batterie — tension unitaire"><Select value={batteryVoltage} onChange={(v) => setBatteryVoltage(parseFloat(v))} options={[2, 6, 12]} /></Field>
+        </div>
+        <div style={{ borderTop: `1px dashed ${C.border}` }} className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4 pt-4">
+          <Field label="Isc panneau unitaire" hint="A — datasheet"><NumInput value={panelIsc} onChange={setPanelIsc} step={0.1} suffix="A" /></Field>
+          <Field label="Voc panneau unitaire" hint="V — datasheet"><NumInput value={panelVoc} onChange={setPanelVoc} step={0.5} suffix="V" /></Field>
+          <Field label="Coeff. Voc à froid"><NumInput value={vocColdFactor} onChange={setVocColdFactor} step={0.01} /></Field>
+          <Field label="Réseau AC sortie onduleur">
+            <Select value={acPhase} onChange={setAcPhase} options={["mono", "tri"]} labels={["230V monophasé", "400V triphasé"]} />
+          </Field>
+          <Field label="Zone à risque de foudre élevé">
+            <label className="flex items-center gap-2 text-xs cursor-pointer h-[34px]" style={{ color: C.text, fontFamily: SANS }}>
+              <input type="checkbox" checked={highLightningRisk} onChange={(e) => setHighLightningRisk(e.target.checked)} /> Oui
+            </label>
+          </Field>
+        </div>
+      </Section>
+
+      {!unlocked ? (
+        <div className="rounded-xl p-8 text-center mb-6" style={{ background: C.panel, border: `1px solid ${C.border}` }}>
+          <Lock size={22} color={C.amber} className="mx-auto mb-2" />
+          <p style={{ color: C.text, fontFamily: SANS }} className="text-sm font-medium mb-1">Résultats détaillés verrouillés</p>
+          <p style={{ color: C.muted, fontFamily: SANS }} className="text-xs mb-3">
+            Débloque le calcul complet (panneaux, batteries, régulateur, onduleur, câblage) avec ton code d'accès.
+          </p>
+          <div className="flex items-center justify-center gap-2 max-w-xs mx-auto">
+            <div className="flex-1"><TextInput value={enteredCode} onChange={setEnteredCode} mono /></div>
+          </div>
+          <a href={purchaseLink} target="_blank" rel="noreferrer" style={{ color: C.teal, fontFamily: SANS }} className="text-xs underline mt-3 inline-block">
+            Pas encore de code ? Obtenir l'accès →
+          </a>
+        </div>
+      ) : (
+        <>
+          {/* 04. Résultats avec formules */}
+          <Section n="04" title="Résultats détaillés — formules & calculs" subtitle="Chaque valeur affiche la formule utilisée et le calcul avec tes propres chiffres." accent={C.teal}>
+            <div className="flex items-center gap-1.5 mb-1" style={{ color: C.amber }}><Unlock size={13} /><span style={{ fontFamily: SANS }} className="text-xs">Contenu débloqué</span></div>
+
+            <Formula label="Énergie journalière corrigée"
+              formula="Ec' = Ec / η"
+              sub={`= ${fmt(calc.dailyEnergyWh)} Wh ÷ ${efficiency}%`}
+              result={fmt(calc.correctedEnergyWh)} unit="Wh/j" />
+
+            <Formula label="Irradiation effective retenue"
+              formula="HSPeff = HSP × correction"
+              sub={`= ${hsp} × ${tiltCorrection}%`}
+              result={fmt(calc.effHsp, 2)} unit="kWh/m²/j" accent={C.teal} />
+
+            <Formula label="Puissance crête du champ photovoltaïque"
+              formula="Pc = (Ec' × Ks) / HSPeff"
+              sub={`= (${fmt(calc.correctedEnergyWh)} × ${safetyFactor}) ÷ ${fmt(calc.effHsp, 2)}`}
+              result={fmt(calc.peakWp)} unit="Wc" />
+
+            <Formula label="Nombre de panneaux"
+              formula="Np = Pc / Wc_unitaire → arrangement Ns × Npar"
+              sub={`= ${fmt(calc.peakWp)} ÷ ${panelWp} → ${calc.panelsSeries} série × ${calc.panelsParallel} parallèle`}
+              result={calc.totalPanels} unit="panneaux" />
+
+            <Formula label="Capacité de batterie requise"
+              formula="Cbat = (Ec' × N) / (Usys × DOD)"
+              sub={`= (${fmt(calc.correctedEnergyWh)} × ${autonomyDays}) ÷ (${systemVoltage} × ${dod}%)`}
+              result={fmt(calc.battCapTotalAh)} unit="Ah" accent={C.teal} />
+
+            <Formula label="Nombre de batteries"
+              formula="Nbat = arrangement Ns × Npar"
+              sub={`Ns = Usys/Ubat = ${calc.battSeries} · Npar = Cbat/Cunitaire = ${calc.battParallel}`}
+              result={calc.totalBatteries} unit="batteries" accent={C.teal} />
+
+            <Formula label="Courant du régulateur"
+              formula="Ireg = (Pc × marge) / Usys"
+              sub={`= (${fmt(calc.peakWp)} × ${regMargin}) ÷ ${systemVoltage}`}
+              result={`${fmt(calc.regCurrentRaw, 1)} A calc. → ${calc.regulator} A normalisé`} unit="" accent={C.teal} />
+
+            <Formula label="Puissance de l'onduleur"
+              formula="Pond = Pmax_simultanée × marge"
+              sub={`= ${fmt(calc.maxInstantW)} × ${inverterMargin}`}
+              result={fmt(calc.inverterVA)} unit="VA" />
+          </Section>
+
+          {/* 05. Câblage */}
+          <Section n="05" title="Section des câbles — formules & calculs" subtitle="S = (2 × L × I) / (56 × ΔU), avec ΔU = Usys × chute admissible.">
+            <div className="grid sm:grid-cols-3 gap-3 mb-3">
+              <Field label="Longueur panneaux → régulateur" hint="m"><NumInput value={distPV} onChange={setDistPV} /></Field>
+              <Field label="Longueur batterie → onduleur" hint="m"><NumInput value={distBatt} onChange={setDistBatt} /></Field>
+              <Field label="Chute de tension admissible"><NumInput value={dropPct} onChange={setDropPct} step={0.5} suffix="%" /></Field>
+            </div>
+            <Formula label="Câble PV → régulateur"
+              formula="S = (2 × L × I) / (56 × ΔU)"
+              sub={`= (2 × ${distPV} × ${fmt(calc.currentPV, 1)}) ÷ (56 × ${fmt((systemVoltage * dropPct) / 100, 2)})`}
+              result={`${fmt(calc.sectionPVraw, 2)} mm² calc. → ${calc.sectionPV} mm² normalisé`} unit="" />
+            <Formula label="Câble batterie → onduleur"
+              formula="S = (2 × L × I) / (56 × ΔU)"
+              sub={`= (2 × ${distBatt} × ${fmt(calc.currentBatt, 1)}) ÷ (56 × ${fmt((systemVoltage * dropPct) / 100, 2)})`}
+              result={`${fmt(calc.sectionBattraw, 2)} mm² calc. → ${calc.sectionBatt} mm² normalisé`} unit="" accent={C.teal} />
+          </Section>
+
+          {/* 06. Protections */}
+          <Section n="06" title="Protections & sécurité de l'installation" subtitle="Fusibles, disjoncteurs, sectionneurs, parafoudres et mise à la terre — critère de choix, calcul et type recommandé pour chaque organe." accent={C.teal}>
+            <ProtectionRow label="Fusible de chaîne DC (coffret DC)"
+              formula={calc.panelsParallel > 1 ? "If = 1.25 × Isc_unitaire" : null}
+              sub={calc.panelsParallel > 1 ? `= 1.25 × ${panelIsc} A` : null}
+              result={calc.panelsParallel > 1 ? calc.stringFuseStd : null} unit={calc.panelsParallel > 1 ? "A" : ""}
+              note={calc.panelsParallel > 1
+                ? `Fusible type gPV (dédié DC photovoltaïque), un par chaîne — ${calc.panelsParallel} chaînes en parallèle. Ne pas utiliser un fusible AC (gG) : coupure d'arc DC insuffisante.`
+                : "Une seule chaîne de panneaux (pas de parallèle) : fusible de chaîne non nécessaire, la protection est assurée par le sectionneur/disjoncteur DC général."} />
+
+            <ProtectionRow label="Sectionneur / disjoncteur DC général (champ PV → régulateur)"
+              formula="IDC = 1.25 × Isc_total ; UDC ≥ Voc_total × coeff. froid"
+              sub={`= 1.25 × (${panelIsc} × ${calc.panelsParallel}) = 1.25 × ${fmt(calc.iscTotalDC, 1)} A ; U ≥ ${panelVoc} × ${calc.panelsSeries} × ${vocColdFactor}`}
+              result={`${calc.mainDCStd} A · tenue ≥ ${fmt(calc.vocStringTotal)} V`} unit=""
+              note="Sectionneur-disjoncteur DC bipolaire avec pouvoir de coupure en charge côté continu, polarités clairement repérées (+/−)." />
+
+            <ProtectionRow label="Disjoncteur DC — régulateur → batterie (charge)"
+              formula="I = 1.25 × Icalibre régulateur"
+              sub={`= 1.25 × ${calc.regulator} A`}
+              result={calc.chargeBreakerStd} unit="A"
+              note="Disjoncteur DC dédié (jamais un modèle AC standard) — coupure de l'arc continu et respect de la polarité." />
+
+            <ProtectionRow label="Disjoncteur + sectionneur DC — batterie → onduleur (décharge)"
+              formula="I = 1.25 × Ibatterie (côté onduleur)"
+              sub={`= 1.25 × ${fmt(calc.currentBatt, 1)} A`}
+              result={calc.dischargeBreakerStd} unit="A"
+              note="Sectionneur de proximité batterie obligatoire (coupure d'urgence manuelle), associé au disjoncteur DC de même calibre." />
+
+            <ProtectionRow label="Parafoudre DC (entre champ PV et régulateur)"
+              formula="Uc ≥ 1.2 × Voc_total"
+              sub={`≥ 1.2 × ${fmt(calc.vocStringTotal)} V`}
+              result={`${calc.spdType}`} unit=""
+              note={`Parafoudre ${calc.spdType} sur chaque polarité + terre, avec voyant de défaut. ${highLightningRisk ? "Zone à risque de foudre élevé → Type 1+2 conseillé." : "Risque standard → Type 2 suffisant ; passer en Type 1+2 si ligne aérienne longue ou zone kéraunique élevée."}`} />
+
+            <ProtectionRow label="Disjoncteur AC (sortie onduleur)"
+              formula="IAC = Pond / U (mono) ou Pond / (√3×U) (tri) ; Idisj = 1.25 × IAC"
+              sub={`IAC = ${fmt(calc.iAC, 1)} A (${acPhase === "tri" ? "400V triphasé" : "230V monophasé"}) → 1.25 × ${fmt(calc.iAC, 1)}`}
+              result={calc.acBreakerStd} unit="A"
+              note="Disjoncteur courbe C (usage général onduleur), associé à un différentiel 30 mA de type A (ou type B si spécifié par le fabricant de l'onduleur — courants de fuite continus possibles)." />
+
+            <ProtectionRow label="Interrupteur-sectionneur général AC"
+              formula="I ≥ Idisjoncteur AC"
+              sub={`≥ ${calc.acBreakerStd} A`}
+              result={calc.acBreakerStd} unit="A"
+              note="Sectionneur visible et cadenassable, bipolaire (mono) ou tétrapolaire (triphasé), pouvoir de coupure en charge — coupure générale avant intervention." />
+
+            <ProtectionRow label="Parafoudre AC (avant les charges)"
+              formula="Uc ≥ 1.1 × Un"
+              sub={`≥ 1.1 × ${calc.acLineVoltage} V`}
+              result={`${calc.spdType}`} unit=""
+              note="Parafoudre AC en tête d'installation, associé à la mise à la terre — protège l'onduleur et les charges sensibles." />
+
+            <ProtectionRow label="Mise à la terre"
+              formula="S(terre) : = S(actif) si ≤16mm² · =16mm² si 16–35mm² · =S(actif)/2 si >35mm²"
+              sub={`Section active de référence = ${Math.max(calc.sectionPV, calc.sectionBatt)} mm²`}
+              result={`${calc.earthSectionStd} mm² · résistance de terre visée ≤ 10 Ω`} unit=""
+              note="Piquet(s) de terre ou boucle à fond de fouille, conducteur cuivre (nu ou vert-jaune protégé), liaison équipotentielle des masses métalliques (châssis panneaux, coffrets DC/AC, chemin de câbles)." />
+
+            <ProtectionRow label="Coffrets de protection DC & AC"
+              note="Coffret DC : IP65 mini, fusibles/disjoncteurs DC + parafoudre DC + bornes de raccordement des chaînes. Coffret AC : IP54/65, disjoncteur différentiel + parafoudre AC + sectionneur général — tous deux en amont/aval de l'onduleur, accessibles et repérés." />
+          </Section>
+        </>
+      )}
+
+      <div className="flex items-start gap-2 text-xs mt-4" style={{ color: C.muted }}>
+        <Info size={13} className="mt-0.5 shrink-0" />
+        <p>
+          Formules standards de dimensionnement d'un système photovoltaïque autonome, applicables à n'importe quel pays et n'importe quelle charge.
+          Les valeurs par défaut (HSP, DOD, rendement, inclinaison) sont des ordres de grandeur à ajuster selon le site réel, la technologie de batterie et les datasheets des équipements.
+        </p>
+      </div>
+      </div>
+    </div>
+  );
+}
+
+
+ReactDOM.createRoot(document.getElementById("root")).render(<SolarSizer />);
+</script>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
