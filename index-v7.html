@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Solaire Lithium Pro — Dimensionnement</title>
+<meta name="description" content="Application personnelle de dimensionnement solaire photovoltaïque autonome." />
+
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#0B1721" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Solaire Pro" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="icon" href="icon-192.png" />
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  html, body { background: #0B1721; margin: 0; }
+  #root { min-height: 100vh; }
+  @media print {
+    html, body { background: #fff; }
+  }
+  .boot-msg {
+    color: #EAF2F5; font-family: -apple-system, sans-serif; padding: 32px 20px;
+    text-align: center; font-size: 15px; line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div id="root"><div class="boot-msg">Chargement de l'application…</div></div>
+
+<script>
+  // Filet de sécurité : si une erreur survient au chargement, on l'affiche
+  // directement dans la page (utile car on ne peut pas ouvrir la console sur mobile).
+  window.addEventListener("error", function (e) {
+    var root = document.getElementById("root");
+    if (root) {
+      root.innerHTML = '<div class="boot-msg" style="color:#FF6B6B;text-align:left;max-width:600px;margin:0 auto;">'
+        + '<b>Erreur au chargement de l\'application</b><br><br>'
+        + (e && e.message ? e.message.replace(/</g, "&lt;") : "Erreur inconnue")
+        + '<br><br><span style="color:#7E96A3;font-size:13px">'
+        + 'Vérifie ta connexion internet et recharge la page. Si le problème persiste, '
+        + 'fais une capture de cet écran.</span></div>';
+    }
+  });
+</script>
+
+<script>
+"use strict";
+function Icon({ children, size = 16, color = "currentColor", className }) {
+    return (React.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: "2", strokeLinecap: "round", strokeLinejoin: "round", className: className }, children));
+}
+const Sun = (p) => React.createElement(Icon, { ...p },
+    React.createElement("circle", { cx: "12", cy: "12", r: "4" }),
+    React.createElement("path", { d: "M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" }));
+const Battery = (p) => React.createElement(Icon, { ...p },
+    React.createElement("rect", { x: "2", y: "7", width: "17", height: "10", rx: "2" }),
+    React.createElement("line", { x1: "22", y1: "11", x2: "22", y2: "13" }));
+const Zap = (p) => React.createElement(Icon, { ...p },
+    React.createElement("path", { d: "M13 2 4 14h6l-1 8 9-12h-6z" }));
+const Plug = (p) => React.createElement(Icon, { ...p },
+    React.createElement("path", { d: "M12 22v-5" }),
+    React.createElement("path", { d: "M9 8V2M15 8V2" }),
+    React.createElement("path", { d: "M7 8h10v4a5 5 0 0 1-10 0z" }));
+const Cable = (p) => React.createElement(Icon, { ...p },
+    React.createElement("path", { d: "M4 4v6a4 4 0 0 0 4 4h8a4 4 0 0 0 4-4V4" }),
+    React.createElement("path", { d: "M4 4h4M16 4h4M12 14v8" }));
+const Plus = (p) => React.createElement(Icon, { ...p },
+    React.createElement("line", { x1: "12", y1: "5", x2: "12", y2: "19" }),
+    React.createElement("line", { x1: "5", y1: "12", x2: "19", y2: "12" }));
+const Trash2 = (p) => React.createElement(Icon, { ...p },
+    React.createElement("path", { d: "M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" }),
+    React.createElement("line", { x1: "10", y1: "10", x2: "10", y2: "16" }),
+    React.createElement("line", { x1: "14", y1: "10", x2: "14", y2: "16" }));
+const Info = (p) => React.createElement(Icon, { ...p },
+    React.createElement("circle", { cx: "12", cy: "12", r: "10" }),
+    React.createElement("line", { x1: "12", y1: "16", x2: "12", y2: "12" }),
+    React.createElement("line", { x1: "12", y1: "8", x2: "12.01", y2: "8" }));
+const Gauge = (p) => React.createElement(Icon, { ...p },
+    React.createElement("path", { d: "M12 14 16 10" }),
+    React.createElement("circle", { cx: "12", cy: "12", r: "10" }));
+const Lock = (p) => React.createElement(Icon, { ...p },
+    React.createElement("rect", { x: "4", y: "11", width: "16", height: "9", rx: "2" }),
+    React.createElement("path", { d: "M8 11V7a4 4 0 0 1 8 0v4" }));
+const Unlock = (p) => React.createElement(Icon, { ...p },
+    React.createElement("rect", { x: "4", y: "11", width: "16", height: "9", rx: "2" }),
+    React.createElement("path", { d: "M8 11V7a4 4 0 0 1 7.5-2" }));
+const Compass = (p) => React.createElement(Icon, { ...p },
+    React.createElement("circle", { cx: "12", cy: "12", r: "10" }),
+    React.createElement("path", { d: "m14.5 9.5-2 5-5 2 2-5z" }));
+const Download = (p) => React.createElement(Icon, { ...p },
+    React.createElement("path", { d: "M12 3v12M7 10l5 5 5-5M4 21h16" }));
+const ImageIcon = (p) => React.createElement(Icon, { ...p },
+    React.createElement("rect", { x: "3", y: "3", width: "18", height: "18", rx: "2" }),
+    React.createElement("circle", { cx: "9", cy: "9", r: "2" }),
+    React.createElement("path", { d: "m21 15-5-5L5 21" }));
+const C = {
+    bg: "#0B1721",
+    panel: "#122430",
+    panel2: "#0F1F29",
+    border: "#1F3846",
+    amber: "#FFB238",
+    teal: "#33D6A6",
+    text: "#EAF2F5",
+    muted: "#7E96A3",
+    danger: "#FF6B6B",
+};
+const MONO = "ui-monospace, SFMono-Regular, 'IBM Plex Mono', Menlo, Consolas, monospace";
+const SANS = "ui-sans-serif, -apple-system, 'Segoe UI', Roboto, sans-serif";
+const REGULATOR_SIZES = [10, 15, 20, 30, 40, 50, 60, 80, 100];
+const CABLE_SIZES = [1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95];
+const BREAKER_SIZES = [2, 4, 6, 10, 13, 16, 20, 25, 32, 40, 50, 63, 80, 100, 125];
+// Valeurs indicatives d'irradiation moyenne annuelle (HSP, kWh/m²/j) — moyennes nationales approximatives.
+// Fortes variations possibles selon la région exacte : à confirmer via PVGIS / NASA POWER / Global Solar Atlas.
+const REGIONS = {
+    "Afrique": [
+        ["Bénin", 5.0], ["Nigeria", 5.0], ["Togo", 4.9], ["Ghana", 5.0], ["Côte d'Ivoire", 4.8],
+        ["Sénégal", 5.5], ["Mali", 5.8], ["Burkina Faso", 5.6], ["Niger", 6.0], ["Cameroun", 4.6],
+        ["RD Congo", 4.4], ["Kenya", 5.5], ["Éthiopie", 5.6], ["Tanzanie", 5.4], ["Maroc", 5.3],
+        ["Algérie", 5.9], ["Tunisie", 5.4], ["Égypte", 6.1], ["Afrique du Sud", 5.3], ["Madagascar", 5.1],
+    ],
+    "Europe": [
+        ["France", 3.6], ["Espagne", 4.7], ["Portugal", 4.9], ["Italie", 4.2], ["Allemagne", 3.0],
+        ["Royaume-Uni", 2.8], ["Belgique", 2.9], ["Pays-Bas", 2.9], ["Grèce", 4.6], ["Pologne", 2.9],
+        ["Suède", 2.7], ["Norvège", 2.5], ["Suisse", 3.3], ["Roumanie", 3.5], ["Turquie", 4.3],
+    ],
+    "Asie": [
+        ["Arabie Saoudite", 6.0], ["Émirats Arabes Unis", 5.9], ["Inde", 5.3], ["Chine", 3.9], ["Japon", 3.5],
+        ["Corée du Sud", 3.3], ["Indonésie", 4.5], ["Thaïlande", 4.7], ["Vietnam", 4.4], ["Pakistan", 5.3],
+        ["Philippines", 4.5], ["Malaisie", 4.2], ["Iran", 5.2],
+    ],
+    "Amérique": [
+        ["États-Unis", 4.7], ["Canada", 3.2], ["Mexique", 5.5], ["Brésil", 5.0], ["Argentine", 4.8],
+        ["Chili", 5.6], ["Colombie", 4.5], ["Pérou", 5.3], ["Bolivie", 5.5],
+    ],
+    "Océanie": [
+        ["Australie", 5.6], ["Nouvelle-Zélande", 3.8],
+    ],
+};
+function fmt(n, d = 0) {
+    if (!isFinite(n) || isNaN(n))
+        return "—";
+    return n.toLocaleString("fr-FR", { maximumFractionDigits: d, minimumFractionDigits: d });
+}
+// Le franc CFA (BCEAO/BEAC) est arrimé à taux fixe à l'euro.
+const RATE_XOF_EUR = 655.957;
+function fmtMoney(xofValue, currency, forPdf) {
+    if (!isFinite(xofValue) || isNaN(xofValue))
+        xofValue = 0;
+    if (currency === "EUR") {
+        const v = xofValue / RATE_XOF_EUR;
+        return v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (forPdf ? " EUR" : " €");
+    }
+    return Math.round(xofValue).toLocaleString("fr-FR") + " FCFA";
+}
+function round2(n) {
+    if (!isFinite(n) || isNaN(n))
+        return 0;
+    return Math.round(n * 100) / 100;
+}
+function toDisplayAmount(xofValue, currency) {
+    return currency === "EUR" ? xofValue / RATE_XOF_EUR : xofValue;
+}
+function fromDisplayAmount(displayValue, currency) {
+    return currency === "EUR" ? displayValue * RATE_XOF_EUR : displayValue;
+}
+function pickStandard(list, value) {
+    const f = list.find((v) => v >= value);
+    return f !== undefined ? f : list[list.length - 1];
+}
+// Générateur PDF minimal, 100% JS natif (aucune dépendance, aucun réseau) — compatible navigateur.
+function escPdfText(s) {
+    return String(s).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+function sanitizeForPdf(str) {
+    return String(str)
+        .replace(/[\u202f\u00a0]/g, " ")
+        .replace(/\u0394/g, "d")
+        .replace(/\u221a3/g, "1.732")
+        .replace(/\u221a/g, "sqrt")
+        .replace(/\u03a9/g, "Ohms")
+        .replace(/\u2265/g, ">=")
+        .replace(/\u2264/g, "<=")
+        .replace(/\u2192/g, "->")
+        .replace(/\u2248/g, "~")
+        .replace(/[\u201c\u201d]/g, '"')
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u2014\u2013]/g, "-")
+        .replace(/\u2026/g, "...")
+        .split("")
+        .map((ch) => (ch.charCodeAt(0) <= 0xff ? ch : "?"))
+        .join("");
+}
+function strToBytes(str) {
+    const bytes = new Uint8Array(str.length);
+    for (let i = 0; i < str.length; i++)
+        bytes[i] = str.charCodeAt(i) & 0xff;
+    return bytes;
+}
+function concatBytes(arrays) {
+    let total = 0;
+    for (const a of arrays)
+        total += a.length;
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const a of arrays) {
+        out.set(a, off);
+        off += a.length;
+    }
+    return out;
+}
+function createPdfDoc() {
+    const PAGE_W = 595.28, PAGE_H = 841.89;
+    const MARGIN = 48;
+    const lineHeight = 13;
+    let pages = [];
+    let cur = [];
+    let y = PAGE_H - MARGIN;
+    function newPage() {
+        if (cur.length)
+            pages.push(cur);
+        cur = [];
+        y = PAGE_H - MARGIN;
+    }
+    function ensureSpace(need) {
+        if (y - need < MARGIN)
+            newPage();
+    }
+    function text(x, str, opts = {}) {
+        const size = opts.size || 9.5;
+        const font = opts.bold ? "/F2" : "/F1";
+        const color = opts.color || [0.07, 0.09, 0.1];
+        const lh = opts.lh || lineHeight;
+        ensureSpace(lh);
+        cur.push(`${color[0]} ${color[1]} ${color[2]} rg`);
+        cur.push(`BT ${font} ${size} Tf ${x} ${y} Td (${escPdfText(sanitizeForPdf(str))}) Tj ET`);
+        y -= lh;
+    }
+    function row(cols, opts = {}) {
+        const lh = opts.lh || lineHeight;
+        ensureSpace(lh);
+        const size = opts.size || 9.5;
+        const color = opts.color || [0.07, 0.09, 0.1];
+        cols.forEach((c) => {
+            const font = c.bold ? "/F2" : "/F1";
+            cur.push(`${color[0]} ${color[1]} ${color[2]} rg`);
+            cur.push(`BT ${font} ${c.size || size} Tf ${c.x} ${y} Td (${escPdfText(sanitizeForPdf(c.text))}) Tj ET`);
+        });
+        y -= lh;
+    }
+    function hr() {
+        ensureSpace(8);
+        const yy = y + 4;
+        cur.push(`0.6 0.6 0.6 RG 0.6 w ${MARGIN} ${yy} m ${PAGE_W - MARGIN} ${yy} l S`);
+        y -= 6;
+    }
+    function space(px) {
+        y -= px;
+        if (y < MARGIN)
+            newPage();
+    }
+    function getY() { return y; }
+    function pageWidth() { return PAGE_W; }
+    function margin() { return MARGIN; }
+    function willFit(need) { return (y - need) >= MARGIN; }
+    function build() {
+        if (cur.length)
+            pages.push(cur);
+        const catalogNum = 1, pagesNum = 2, fontRegNum = 3, fontBoldNum = 4;
+        let nextNum = 5;
+        const pageNums = [], contentNums = [], pageStreams = [];
+        pages.forEach((ops) => {
+            const pNum = nextNum++;
+            const cNum = nextNum++;
+            pageNums.push(pNum);
+            contentNums.push(cNum);
+            pageStreams.push(ops.join("\n") + "\n");
+        });
+        const objs = [];
+        objs[catalogNum - 1] = `<< /Type /Catalog /Pages ${pagesNum} 0 R >>`;
+        objs[pagesNum - 1] = `<< /Type /Pages /Kids [${pageNums.map((n) => n + " 0 R").join(" ")}] /Count ${pageNums.length} >>`;
+        objs[fontRegNum - 1] = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>`;
+        objs[fontBoldNum - 1] = `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>`;
+        pageNums.forEach((pNum, i) => {
+            const cNum = contentNums[i];
+            objs[pNum - 1] = `<< /Type /Page /Parent ${pagesNum} 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources << /Font << /F1 ${fontRegNum} 0 R /F2 ${fontBoldNum} 0 R >> >> /Contents ${cNum} 0 R >>`;
+            objs[cNum - 1] = { stream: strToBytes(pageStreams[i]) };
+        });
+        const chunks = [strToBytes("%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n")];
+        let pos = chunks[0].length;
+        const xref = [0];
+        for (let i = 0; i < objs.length; i++) {
+            xref.push(pos);
+            const num = i + 1;
+            const content = objs[i];
+            let buf;
+            if (content && content.stream) {
+                const header = strToBytes(`${num} 0 obj\n<< /Length ${content.stream.length} >>\nstream\n`);
+                const footer = strToBytes(`\nendstream\nendobj\n`);
+                buf = concatBytes([header, content.stream, footer]);
+            }
+            else {
+                buf = strToBytes(`${num} 0 obj\n${content}\nendobj\n`);
+            }
+            chunks.push(buf);
+            pos += buf.length;
+        }
+        const xrefStart = pos;
+        let xrefStr = `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+        for (let i = 1; i <= objs.length; i++) {
+            xrefStr += `${String(xref[i]).padStart(10, "0")} 00000 n \n`;
+        }
+        const trailer = `trailer\n<< /Size ${objs.length + 1} /Root ${catalogNum} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+        chunks.push(strToBytes(xrefStr + trailer));
+        return concatBytes(chunks);
+    }
+    return { text, row, hr, space, newPage, build, getY, pageWidth, margin, willFit };
+}
+function Field({ label, hint, children }) {
+    return (React.createElement("label", { className: "block" },
+        React.createElement("div", { className: "flex items-baseline justify-between mb-1" },
+            React.createElement("span", { style: { color: C.muted, fontFamily: SANS }, className: "text-[11px] uppercase tracking-wider" }, label),
+            hint && React.createElement("span", { style: { color: C.muted, fontFamily: MONO }, className: "text-[10px]" }, hint)),
+        children));
+}
+function NumInput({ value, onChange, step = 1, min = 0, suffix }) {
+    return (React.createElement("div", { className: "flex items-center rounded-md px-2 py-1.5", style: { background: C.panel2, border: `1px solid ${C.border}` } },
+        React.createElement("input", { type: "number", value: value, step: step, min: min, onChange: (e) => onChange(parseFloat(e.target.value) || 0), className: "w-full bg-transparent outline-none text-sm", style: { color: C.text, fontFamily: MONO } }),
+        suffix && React.createElement("span", { style: { color: C.muted, fontFamily: MONO }, className: "text-[11px] pl-1 whitespace-nowrap" }, suffix)));
+}
+function TextInput({ value, onChange, mono }) {
+    return (React.createElement("input", { value: value, onChange: (e) => onChange(e.target.value), className: "w-full rounded-md px-2 py-1.5 text-sm outline-none", style: { background: C.panel2, border: `1px solid ${C.border}`, color: C.text, fontFamily: mono ? MONO : SANS } }));
+}
+function Select({ value, onChange, options, labels }) {
+    return (React.createElement("select", { value: value, onChange: (e) => onChange(e.target.value), className: "w-full rounded-md px-2 py-1.5 text-sm outline-none", style: { background: C.panel2, border: `1px solid ${C.border}`, color: C.text, fontFamily: MONO } }, options.map((o, i) => React.createElement("option", { key: o, value: o, style: { background: C.panel2 } }, labels ? labels[i] : o))));
+}
+function Section({ n, title, subtitle, children, accent }) {
+    return (React.createElement("section", { className: "mb-6" },
+        React.createElement("div", { className: "flex items-baseline gap-3 mb-3" },
+            React.createElement("span", { style: { color: accent || C.amber, fontFamily: MONO, borderColor: C.border }, className: "text-xs border rounded px-1.5 py-0.5" }, n),
+            React.createElement("h2", { style: { color: C.text, fontFamily: SANS }, className: "text-base font-semibold tracking-tight" }, title)),
+        subtitle && React.createElement("p", { style: { color: C.muted, fontFamily: SANS }, className: "text-xs mb-3 -mt-2" }, subtitle),
+        React.createElement("div", { className: "rounded-xl p-4", style: { background: C.panel, border: `1px solid ${C.border}` } }, children)));
+}
+function Stat({ icon: Icon, label, value, unit, accent }) {
+    return (React.createElement("div", { className: "rounded-lg p-3 flex-1 min-w-[130px]", style: { background: C.panel2, border: `1px solid ${C.border}` } },
+        React.createElement("div", { className: "flex items-center gap-1.5 mb-1" },
+            React.createElement(Icon, { size: 13, color: accent || C.amber }),
+            React.createElement("span", { style: { color: C.muted, fontFamily: SANS }, className: "text-[10px] uppercase tracking-wider" }, label)),
+        React.createElement("div", { style: { color: C.text, fontFamily: MONO }, className: "text-lg font-semibold leading-none" },
+            value,
+            React.createElement("span", { style: { color: C.muted }, className: "text-xs ml-1" }, unit))));
+}
+function Formula({ label, formula, sub, result, unit, accent }) {
+    return (React.createElement("div", { className: "py-2", style: { borderTop: `1px dashed ${C.border}` } },
+        React.createElement("div", { style: { color: C.text, fontFamily: SANS }, className: "text-xs font-medium mb-1" }, label),
+        React.createElement("div", { style: { color: C.muted, fontFamily: MONO }, className: "text-[11px] leading-relaxed" }, formula),
+        React.createElement("div", { style: { color: C.muted, fontFamily: MONO }, className: "text-[11px] leading-relaxed" }, sub),
+        React.createElement("div", { style: { color: accent || C.amber, fontFamily: MONO }, className: "text-sm font-bold mt-0.5" },
+            "= ",
+            result,
+            " ",
+            unit)));
+}
+function ProtectionRow({ label, formula, sub, result, unit, note, accent }) {
+    return (React.createElement("div", { className: "py-2", style: { borderTop: `1px dashed ${C.border}` } },
+        React.createElement("div", { style: { color: C.text, fontFamily: SANS }, className: "text-xs font-medium mb-1" }, label),
+        formula && React.createElement("div", { style: { color: C.muted, fontFamily: MONO }, className: "text-[11px] leading-relaxed" }, formula),
+        sub && React.createElement("div", { style: { color: C.muted, fontFamily: MONO }, className: "text-[11px] leading-relaxed" }, sub),
+        result && React.createElement("div", { style: { color: accent || C.amber, fontFamily: MONO }, className: "text-sm font-bold mt-0.5" },
+            "= ",
+            result,
+            " ",
+            unit),
+        note && React.createElement("div", { style: { color: C.teal, fontFamily: SANS }, className: "text-[11px] mt-1 leading-relaxed" }, note)));
+}
+function PrintReport(p) {
+    const th = { textAlign: "left", padding: "4px 6px", borderBottom: "1px solid #999", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.4 };
+    const td = { padding: "4px 6px", borderBottom: "1px solid #ddd", fontSize: 11 };
+    return (React.createElement("div", { id: "print-report", className: "print-only", style: { background: "#fff", color: "#111", fontFamily: SANS, padding: 24 } },
+        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "2px solid #111", paddingBottom: 10, marginBottom: 14 } },
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+                p.logo && React.createElement("img", { src: p.logo, alt: "logo", style: { height: 48, maxWidth: 140, objectFit: "contain" } }),
+                React.createElement("div", null,
+                    React.createElement("div", { style: { fontSize: 16, fontWeight: 700 } }, p.brand),
+                    React.createElement("div", { style: { fontSize: 10, color: "#555" } }, "Fiche de dimensionnement solaire"))),
+            React.createElement("div", { style: { textAlign: "right", fontSize: 10, color: "#555" } },
+                "\u00C9dit\u00E9 le ",
+                p.dateStr)),
+        (p.clientName || p.projectAddress) && (React.createElement("div", { style: { fontSize: 11, marginBottom: 14 } },
+            p.clientName && React.createElement("div", null,
+                React.createElement("b", null, "Client :"),
+                " ",
+                p.clientName),
+            p.projectAddress && React.createElement("div", null,
+                React.createElement("b", null, "Projet / adresse :"),
+                " ",
+                p.projectAddress),
+            React.createElement("div", null,
+                React.createElement("b", null, "Localisation :"),
+                " ",
+                p.country,
+                ", ",
+                p.continent))),
+        React.createElement("div", { style: { fontSize: 12, fontWeight: 700, margin: "12px 0 6px" } }, "Charges \u00E0 alimenter"),
+        React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", marginBottom: 10 } },
+            React.createElement("thead", null,
+                React.createElement("tr", null,
+                    React.createElement("th", { style: th }, "Appareil"),
+                    React.createElement("th", { style: th }, "P (W)"),
+                    React.createElement("th", { style: th }, "Qt\u00E9"),
+                    React.createElement("th", { style: th }, "h/j"),
+                    React.createElement("th", { style: th }, "Wh/j"))),
+            React.createElement("tbody", null,
+                p.loads.map((l) => (React.createElement("tr", { key: l.id },
+                    React.createElement("td", { style: td }, l.name),
+                    React.createElement("td", { style: td }, l.power),
+                    React.createElement("td", { style: td }, l.qty),
+                    React.createElement("td", { style: td }, l.hours),
+                    React.createElement("td", { style: td }, fmt(l.power * l.qty * l.hours))))),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } }, "Total"),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        fmt(p.calc.dailyEnergyWh),
+                        " Wh/j")))),
+        React.createElement("div", { style: { fontSize: 12, fontWeight: 700, margin: "12px 0 6px" } }, "Param\u00E8tres retenus"),
+        React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", marginBottom: 10 } },
+            React.createElement("tbody", null,
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Irradiation (HSP) / correction inclinaison"),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } },
+                        p.hsp,
+                        " kWh/m\u00B2/j \u00D7 ",
+                        p.tiltCorrection,
+                        "% = ",
+                        fmt(p.calc.effHsp, 2),
+                        " kWh/m\u00B2/j")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Latitude / inclinaison conseill\u00E9e / orientation"),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } },
+                        p.latitude,
+                        "\u00B0 \u00B7 ",
+                        p.recommendedTilt,
+                        "\u00B0 \u00B7 face au ",
+                        p.orientation)),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Tension syst\u00E8me"),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } },
+                        p.systemVoltage,
+                        " V")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Autonomie"),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } },
+                        p.autonomyDays,
+                        " j")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "D\u00E9charge max (DOD) / rendement syst\u00E8me"),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } },
+                        p.dod,
+                        "% / ",
+                        p.efficiency,
+                        "%")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Panneau retenu"),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } },
+                        p.panelWp,
+                        " Wc \u2014 ",
+                        p.panelVoltage,
+                        " V")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Batterie retenue"),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } },
+                        p.batteryAh,
+                        " Ah \u2014 ",
+                        p.batteryVoltage,
+                        " V")))),
+        React.createElement("div", { style: { fontSize: 12, fontWeight: 700, margin: "12px 0 6px" } }, "R\u00E9sultats du dimensionnement"),
+        React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", marginBottom: 10 } },
+            React.createElement("thead", null,
+                React.createElement("tr", null,
+                    React.createElement("th", { style: th }, "\u00C9l\u00E9ment"),
+                    React.createElement("th", { style: th }, "Formule"),
+                    React.createElement("th", { style: th }, "R\u00E9sultat"))),
+            React.createElement("tbody", null,
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Puissance cr\u00EAte"),
+                    React.createElement("td", { style: { ...td, fontFamily: MONO } }, "Pc = (Ec'\u00D7Ks)/HSPeff"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        fmt(p.calc.peakWp),
+                        " Wc")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Panneaux"),
+                    React.createElement("td", { style: { ...td, fontFamily: MONO } }, "Np = Pc / Wc_unitaire"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        p.calc.totalPanels,
+                        " (",
+                        p.calc.panelsSeries,
+                        "S \u00D7 ",
+                        p.calc.panelsParallel,
+                        "P)")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Capacit\u00E9 batterie"),
+                    React.createElement("td", { style: { ...td, fontFamily: MONO } }, "Cbat = (Ec'\u00D7N)/(Usys\u00D7DOD)"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        fmt(p.calc.battCapTotalAh),
+                        " Ah")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Batteries"),
+                    React.createElement("td", { style: { ...td, fontFamily: MONO } }, "Nbat = Ns \u00D7 Npar"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        p.calc.totalBatteries,
+                        " (",
+                        p.calc.battSeries,
+                        "S \u00D7 ",
+                        p.calc.battParallel,
+                        "P)")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "R\u00E9gulateur"),
+                    React.createElement("td", { style: { ...td, fontFamily: MONO } }, "Ireg = (Pc\u00D7marge)/Usys"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        p.calc.regulator,
+                        " A")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Onduleur"),
+                    React.createElement("td", { style: { ...td, fontFamily: MONO } }, "Pond = Pmax\u00D7marge"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        fmt(p.calc.inverterVA),
+                        " VA")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "C\u00E2ble PV \u2192 r\u00E9gulateur"),
+                    React.createElement("td", { style: { ...td, fontFamily: MONO } }, "S = (2LI)/(56\u0394U)"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        p.calc.sectionPV,
+                        " mm\u00B2")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "C\u00E2ble batterie \u2192 onduleur"),
+                    React.createElement("td", { style: { ...td, fontFamily: MONO } }, "S = (2LI)/(56\u0394U)"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        p.calc.sectionBatt,
+                        " mm\u00B2")))),
+        React.createElement("div", { style: { fontSize: 12, fontWeight: 700, margin: "12px 0 6px" } }, "Protections & s\u00E9curit\u00E9"),
+        React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", marginBottom: 10 } },
+            React.createElement("thead", null,
+                React.createElement("tr", null,
+                    React.createElement("th", { style: th }, "Organe"),
+                    React.createElement("th", { style: th }, "Valeur retenue"),
+                    React.createElement("th", { style: th }, "Type / caract\u00E9ristiques"))),
+            React.createElement("tbody", null,
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Fusible de cha\u00EEne DC"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } }, p.calc.panelsParallel > 1 ? `${p.calc.stringFuseStd} A` : "N/A"),
+                    React.createElement("td", { style: td }, p.calc.panelsParallel > 1 ? "gPV, 1 par chaîne" : "Non requis (1 seule chaîne)")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Sectionneur/disjoncteur DC g\u00E9n\u00E9ral"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        p.calc.mainDCStd,
+                        " A / ",
+                        fmt(p.calc.vocStringTotal),
+                        " V"),
+                    React.createElement("td", { style: td }, "Bipolaire DC, coupure en charge")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Disjoncteur DC charge (r\u00E9gulateur\u2192batterie)"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        p.calc.chargeBreakerStd,
+                        " A"),
+                    React.createElement("td", { style: td }, "DC d\u00E9di\u00E9")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Disjoncteur/sectionneur DC d\u00E9charge (batterie\u2192onduleur)"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        p.calc.dischargeBreakerStd,
+                        " A"),
+                    React.createElement("td", { style: td }, "Coupure de proximit\u00E9 batterie")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Parafoudre DC"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } }, p.calc.spdType),
+                    React.createElement("td", { style: td }, "Uc \u2265 1.2\u00D7Voc_total")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Disjoncteur AC (sortie onduleur)"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        p.calc.acBreakerStd,
+                        " A"),
+                    React.createElement("td", { style: td }, "Courbe C + diff\u00E9rentiel 30mA type A/B")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Interrupteur-sectionneur AC g\u00E9n\u00E9ral"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        p.calc.acBreakerStd,
+                        " A"),
+                    React.createElement("td", { style: td }, "Cadenassable, coupure visible")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Parafoudre AC"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } }, p.calc.spdType),
+                    React.createElement("td", { style: td }, "Uc \u2265 1.1\u00D7Un")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Mise \u00E0 la terre"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } },
+                        p.calc.earthSectionStd,
+                        " mm\u00B2 \u00B7 \u226410 \u03A9"),
+                    React.createElement("td", { style: td }, "Cuivre, liaison \u00E9quipotentielle des masses")),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: td }, "Coffrets DC / AC"),
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } }, "\u2014"),
+                    React.createElement("td", { style: td }, "IP65 (DC) / IP54-65 (AC)")))),
+        React.createElement("div", { style: { fontSize: 12, fontWeight: 700, margin: "12px 0 6px" } }, "Devis quantitatif et estimatif (DQE)"),
+        React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", marginBottom: 6 } },
+            React.createElement("thead", null,
+                React.createElement("tr", null,
+                    React.createElement("th", { style: th }, "D\u00E9signation"),
+                    React.createElement("th", { style: { ...th, textAlign: "right" } }, "Qt\u00E9"),
+                    React.createElement("th", { style: th }, "Unit\u00E9"),
+                    React.createElement("th", { style: { ...th, textAlign: "right" } }, "Prix unitaire"),
+                    React.createElement("th", { style: { ...th, textAlign: "right" } }, "Montant"))),
+            React.createElement("tbody", null,
+                p.devisRows.map((r) => (React.createElement("tr", { key: r.id },
+                    React.createElement("td", { style: td }, r.label),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } }, fmt(r.qty, r.unit === "m" ? 1 : 0)),
+                    React.createElement("td", { style: td }, r.unit),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } }, fmtMoney(r.priceXOF, p.devisCurrency)),
+                    React.createElement("td", { style: { ...td, textAlign: "right", fontWeight: 700 } }, fmtMoney(r.totalXOF, p.devisCurrency))))),
+                p.extraRowsComputed.map((it) => (React.createElement("tr", { key: it.id },
+                    React.createElement("td", { style: td }, it.name),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } }, fmt(it.qty)),
+                    React.createElement("td", { style: td }, it.unit),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } }, fmtMoney(it.price, p.devisCurrency)),
+                    React.createElement("td", { style: { ...td, textAlign: "right", fontWeight: 700 } }, fmtMoney(it.totalXOF, p.devisCurrency))))),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } }, "Sous-total mat\u00E9riel & fournitures"),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: { ...td, fontWeight: 700, textAlign: "right" } }, fmtMoney(p.devisMaterialTotalXOF, p.devisCurrency))),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } }, "Main d'\u0153uvre / installation (forfait)"),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: { ...td, fontWeight: 700, textAlign: "right" } }, fmtMoney(p.laborCost, p.devisCurrency))),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: { ...td, fontWeight: 700, fontSize: 13, borderBottom: "2px solid #111" } }, "Total g\u00E9n\u00E9ral du devis"),
+                    React.createElement("td", { style: { ...td, borderBottom: "2px solid #111" } }),
+                    React.createElement("td", { style: { ...td, borderBottom: "2px solid #111" } }),
+                    React.createElement("td", { style: { ...td, borderBottom: "2px solid #111" } }),
+                    React.createElement("td", { style: { ...td, fontWeight: 700, fontSize: 13, textAlign: "right", borderBottom: "2px solid #111" } }, fmtMoney(p.devisGrandTotalXOF, p.devisCurrency))))),
+        React.createElement("p", { style: { fontSize: 9, color: "#777", marginTop: 16 } },
+            "Document g\u00E9n\u00E9r\u00E9 par ",
+            p.brand,
+            ". Formules standards de dimensionnement PV autonome ; valeurs \u00E0 confirmer sur site avant installation. Devis estimatif, hors impr\u00E9vus et frais annexes (transport, douane, etc.) sauf mention contraire.")));
+}
+function SolarSizer() {
+    // Marque & accès (vendeur)
+    const [brand, setBrand] = (0, React.useState)("Solaire Lithium Pro");
+    const [paywallEnabled, setPaywallEnabled] = (0, React.useState)(false);
+    const [accessCode, setAccessCode] = (0, React.useState)("SOLAIRE2026");
+    const [purchaseLink, setPurchaseLink] = (0, React.useState)("https://snfjagmk.mychariow.com");
+    const [enteredCode, setEnteredCode] = (0, React.useState)("");
+    const unlocked = !paywallEnabled || enteredCode.trim().toUpperCase() === accessCode.trim().toUpperCase();
+    const [logo, setLogo] = (0, React.useState)(null);
+    const [clientName, setClientName] = (0, React.useState)("");
+    const [projectAddress, setProjectAddress] = (0, React.useState)("");
+    const dateStr = new Date().toLocaleDateString("fr-FR");
+    const handleLogoUpload = (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file)
+            return;
+        const reader = new FileReader();
+        reader.onload = () => setLogo(reader.result);
+        reader.readAsDataURL(file);
+    };
+    const [pdfLoading, setPdfLoading] = (0, React.useState)(false);
+    const [pdfError, setPdfError] = (0, React.useState)("");
+    const handleDownloadPdf = () => {
+        setPdfError("");
+        setPdfLoading(true);
+        try {
+            const doc = createPdfDoc();
+            const M = doc.margin();
+            const PW = doc.pageWidth();
+            // En-tête
+            doc.text(M, brand || "Dimensionnement solaire", { size: 16, bold: true, lh: 20 });
+            doc.text(M, "Fiche de dimensionnement solaire", { size: 9, color: [0.35, 0.4, 0.45] });
+            doc.text(PW - M - 140, "Edite le " + dateStr, { size: 8.5, color: [0.5, 0.5, 0.5] });
+            doc.space(4);
+            doc.hr();
+            doc.space(4);
+            if (clientName)
+                doc.text(M, "Client : " + clientName, { size: 10 });
+            if (projectAddress)
+                doc.text(M, "Projet / adresse : " + projectAddress, { size: 10 });
+            doc.text(M, "Localisation : " + country + ", " + continent, { size: 10 });
+            doc.space(8);
+            // Charges
+            doc.text(M, "Charges a alimenter", { size: 12, bold: true, lh: 16 });
+            const c1 = M, c2 = M + 230, c3 = M + 300, c4 = M + 350, c5 = M + 410;
+            doc.row([
+                { x: c1, text: "Appareil", bold: true }, { x: c2, text: "P (W)", bold: true },
+                { x: c3, text: "Qte", bold: true }, { x: c4, text: "h/j", bold: true }, { x: c5, text: "Wh/j", bold: true },
+            ]);
+            doc.hr();
+            loads.forEach((l) => {
+                doc.row([
+                    { x: c1, text: l.name }, { x: c2, text: String(l.power) }, { x: c3, text: String(l.qty) },
+                    { x: c4, text: String(l.hours) }, { x: c5, text: fmt(l.power * l.qty * l.hours) },
+                ]);
+            });
+            doc.hr();
+            doc.row([{ x: c1, text: "Total", bold: true }, { x: c5, text: fmt(calc.dailyEnergyWh) + " Wh/j", bold: true }]);
+            doc.space(10);
+            // Paramètres
+            doc.text(M, "Parametres retenus", { size: 12, bold: true, lh: 16 });
+            const pRows = [
+                ["Irradiation (HSP) / correction inclinaison", `${hsp} kWh/m2/j x ${tiltCorrection}% = ${fmt(calc.effHsp, 2)} kWh/m2/j`],
+                ["Latitude / inclinaison conseillee / orientation", `${latitude} deg - ${recommendedTilt} deg - face au ${orientation}`],
+                ["Tension systeme", `${systemVoltage} V`],
+                ["Autonomie", `${autonomyDays} j`],
+                ["Decharge max (DOD) / rendement systeme", `${dod}% / ${efficiency}%`],
+                ["Panneau retenu", `${panelWp} Wc - ${panelVoltage} V - Isc ${panelIsc}A - Voc ${panelVoc}V`],
+                ["Batterie retenue", `${batteryAh} Ah - ${batteryVoltage} V`],
+            ];
+            pRows.forEach((r) => doc.row([{ x: c1, text: r[0] }, { x: M + 320, text: r[1] }]));
+            doc.space(10);
+            // Résultats
+            doc.text(M, "Resultats du dimensionnement", { size: 12, bold: true, lh: 16 });
+            const rRows = [
+                ["Puissance crete", "Pc = (Ec'xKs)/HSPeff", fmt(calc.peakWp) + " Wc"],
+                ["Panneaux", "Np = Pc/Wc_unitaire", `${calc.totalPanels} (${calc.panelsSeries}S x ${calc.panelsParallel}P)`],
+                ["Capacite batterie", "Cbat = (Ec'xN)/(UsysxDOD)", fmt(calc.battCapTotalAh) + " Ah"],
+                ["Batteries", "Nbat = Ns x Npar", `${calc.totalBatteries} (${calc.battSeries}S x ${calc.battParallel}P)`],
+                ["Regulateur", "Ireg = (Pcxmarge)/Usys", calc.regulator + " A"],
+                ["Onduleur", "Pond = Pmax_simultanee x marge", fmt(calc.inverterVA) + " VA"],
+                ["Cable PV -> regulateur", "S = (2LI)/(56.dU)", calc.sectionPV + " mm2"],
+                ["Cable batterie -> onduleur", "S = (2LI)/(56.dU)", calc.sectionBatt + " mm2"],
+            ];
+            rRows.forEach((r) => doc.row([
+                { x: c1, text: r[0], bold: true }, { x: c1 + 150, text: r[1], size: 8.5, color: [0.4, 0.45, 0.5] }, { x: c1 + 340, text: r[2], bold: true },
+            ]));
+            doc.space(10);
+            // Protections
+            doc.text(M, "Protections et securite", { size: 12, bold: true, lh: 16 });
+            const protRows = [
+                ["Fusible de chaine DC", calc.panelsParallel > 1 ? calc.stringFuseStd + " A" : "N/A", calc.panelsParallel > 1 ? "gPV, 1 par chaine" : "Non requis (1 chaine)"],
+                ["Sectionneur/disjoncteur DC general", `${calc.mainDCStd} A / ${fmt(calc.vocStringTotal)} V`, "Bipolaire DC, coupure en charge"],
+                ["Disjoncteur DC charge (regulateur->batterie)", calc.chargeBreakerStd + " A", "DC dedie"],
+                ["Disjoncteur/sectionneur DC decharge (batterie->onduleur)", calc.dischargeBreakerStd + " A", "Coupure de proximite batterie"],
+                ["Parafoudre DC", calc.spdType, "Uc >= 1.2 x Voc_total"],
+                ["Disjoncteur AC (sortie onduleur)", calc.acBreakerStd + " A", "Courbe C + differentiel 30mA type A/B"],
+                ["Interrupteur-sectionneur AC general", calc.acBreakerStd + " A", "Cadenassable, coupure visible"],
+                ["Parafoudre AC", calc.spdType, "Uc >= 1.1 x Un"],
+                ["Mise a la terre", calc.earthSectionStd + " mm2 - <=10 Ohms", "Cuivre, liaison equipotentielle des masses"],
+                ["Coffrets DC / AC", "-", "IP65 (DC) / IP54-65 (AC)"],
+            ];
+            protRows.forEach((r) => {
+                doc.row([{ x: c1, text: r[0], bold: true }]);
+                doc.row([{ x: c1 + 10, text: r[1], color: [0.75, 0.55, 0.1] }, { x: c1 + 150, text: r[2], size: 8.5, color: [0.1, 0.55, 0.45] }]);
+            });
+            doc.space(12);
+            // Devis quantitatif et estimatif
+            doc.text(M, "Devis quantitatif et estimatif (DQE)", { size: 12, bold: true, lh: 16 });
+            const dc1 = M, dc2 = M + 220, dc3 = M + 265, dc4 = M + 330, dc5 = M + 420;
+            doc.row([
+                { x: dc1, text: "Designation", bold: true }, { x: dc2, text: "Qte", bold: true },
+                { x: dc3, text: "Unite", bold: true }, { x: dc4, text: "P.U.", bold: true }, { x: dc5, text: "Montant", bold: true },
+            ]);
+            doc.hr();
+            devisRows.forEach((r) => {
+                doc.row([
+                    { x: dc1, text: r.label }, { x: dc2, text: fmt(r.qty, r.unit === "m" ? 1 : 0) },
+                    { x: dc3, text: r.unit }, { x: dc4, text: fmtMoney(r.priceXOF, devisCurrency, true) },
+                    { x: dc5, text: fmtMoney(r.totalXOF, devisCurrency, true) },
+                ]);
+            });
+            extraRowsComputed.forEach((it) => {
+                doc.row([
+                    { x: dc1, text: it.name }, { x: dc2, text: fmt(it.qty) },
+                    { x: dc3, text: it.unit }, { x: dc4, text: fmtMoney(it.price, devisCurrency, true) },
+                    { x: dc5, text: fmtMoney(it.totalXOF, devisCurrency, true) },
+                ]);
+            });
+            doc.hr();
+            doc.row([{ x: dc1, text: "Sous-total materiel & fournitures", bold: true }, { x: dc5, text: fmtMoney(devisMaterialTotalXOF, devisCurrency, true), bold: true }]);
+            doc.row([{ x: dc1, text: "Main d'oeuvre / installation (forfait)", bold: true }, { x: dc5, text: fmtMoney(laborCost, devisCurrency, true), bold: true }]);
+            doc.hr();
+            doc.row([{ x: dc1, text: "TOTAL GENERAL DU DEVIS", bold: true, size: 11 }, { x: dc5, text: fmtMoney(devisGrandTotalXOF, devisCurrency, true), bold: true, size: 11 }]);
+            doc.space(10);
+            doc.text(M, "Devis estimatif, hors imprevus et frais annexes (transport, douane, etc.) sauf mention contraire.", { size: 7.5, color: [0.5, 0.5, 0.5] });
+            doc.space(6);
+            doc.hr();
+            doc.text(M, `Document genere par ${brand || "Dimensionnement solaire"}. Formules standards de dimensionnement PV autonome ; valeurs a confirmer sur site avant installation.`, { size: 7.5, color: [0.5, 0.5, 0.5] });
+            const bytes = doc.build();
+            const blob = new Blob([bytes], { type: "application/pdf" });
+            const url = URL.createObjectURL(blob);
+            const fileName = (brand || "dimensionnement-solaire").trim().replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${fileName || "dimensionnement-solaire"}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+        }
+        catch (err) {
+            setPdfError("La generation du PDF a echoue (" + (err && err.message ? err.message : "erreur inconnue") + "). Utilise le bouton \u00ab Apercu a imprimer \u00bb ci-dessous en repli.");
+        }
+        finally {
+            setPdfLoading(false);
+        }
+    };
+    // Charges
+    const [loads, setLoads] = (0, React.useState)([
+        { id: 1, name: "Ampoule LED", power: 10, qty: 4, hours: 5 },
+        { id: 2, name: "Réfrigérateur", power: 150, qty: 1, hours: 8 },
+        { id: 3, name: "Télévision", power: 80, qty: 1, hours: 4 },
+        { id: 4, name: "Ordinateur portable", power: 65, qty: 1, hours: 3 },
+    ]);
+    const [nextId, setNextId] = (0, React.useState)(5);
+    // Localisation & irradiation
+    const [continent, setContinent] = (0, React.useState)("Afrique");
+    const [country, setCountry] = (0, React.useState)("Bénin");
+    const [hsp, setHsp] = (0, React.useState)(5.0);
+    const [latitude, setLatitude] = (0, React.useState)(6.4);
+    const [tiltCorrection, setTiltCorrection] = (0, React.useState)(100);
+    // Système
+    const [systemVoltage, setSystemVoltage] = (0, React.useState)(24);
+    const [autonomyDays, setAutonomyDays] = (0, React.useState)(2);
+    const [dod, setDod] = (0, React.useState)(50);
+    const [efficiency, setEfficiency] = (0, React.useState)(80);
+    const [safetyFactor, setSafetyFactor] = (0, React.useState)(1.3);
+    const [panelWp, setPanelWp] = (0, React.useState)(300);
+    const [panelVoltage, setPanelVoltage] = (0, React.useState)(12);
+    const [batteryAh, setBatteryAh] = (0, React.useState)(200);
+    const [batteryVoltage, setBatteryVoltage] = (0, React.useState)(12);
+    const [inverterMargin, setInverterMargin] = (0, React.useState)(1.25);
+    const [regMargin, setRegMargin] = (0, React.useState)(1.25);
+    const [distPV, setDistPV] = (0, React.useState)(10);
+    const [distBatt, setDistBatt] = (0, React.useState)(2);
+    const [dropPct, setDropPct] = (0, React.useState)(3);
+    // Protections
+    const [panelIsc, setPanelIsc] = (0, React.useState)(9.5);
+    const [panelVoc, setPanelVoc] = (0, React.useState)(22);
+    const [vocColdFactor, setVocColdFactor] = (0, React.useState)(1.15);
+    const [acPhase, setAcPhase] = (0, React.useState)("mono");
+    const [highLightningRisk, setHighLightningRisk] = (0, React.useState)(false);
+    // Devis quantitatif et estimatif (DQE)
+    const [devisCurrency, setDevisCurrency] = (0, React.useState)("XOF");
+    const [devisPrices, setDevisPrices] = (0, React.useState)({
+        panels: 60000, batteries: 75000, regulator: 20000, inverter: 150000,
+        cablePV: 1200, cableBatt: 1500, stringFuse: 3000, mainDC: 15000,
+        chargeBreaker: 12000, dischargeBreaker: 12000, spdDC: 20000,
+        acBreaker: 12000, acSwitch: 15000, spdAC: 15000, earthing: 25000, coffrets: 20000,
+    });
+    const updateDevisPrice = (id, displayVal) => setDevisPrices((p) => ({ ...p, [id]: fromDisplayAmount(displayVal, devisCurrency) }));
+    const [laborCost, setLaborCost] = (0, React.useState)(100000);
+    const [extraItems, setExtraItems] = (0, React.useState)([]);
+    const [nextExtraId, setNextExtraId] = (0, React.useState)(1);
+    const addExtraItem = () => {
+        setExtraItems((its) => [...its, { id: nextExtraId, name: "Autre poste", qty: 1, unit: "u", price: 0 }]);
+        setNextExtraId((n) => n + 1);
+    };
+    const updateExtraItem = (id, key, val) => setExtraItems((its) => its.map((it) => (it.id === id ? { ...it, [key]: val } : it)));
+    const removeExtraItem = (id) => setExtraItems((its) => its.filter((it) => it.id !== id));
+    const countryOptions = REGIONS[continent].map((c) => c[0]);
+    const onContinentChange = (val) => {
+        setContinent(val);
+        const first = REGIONS[val][0];
+        setCountry(first[0]);
+        setHsp(first[1]);
+    };
+    const onCountryChange = (val) => {
+        setCountry(val);
+        const found = REGIONS[continent].find((c) => c[0] === val);
+        if (found)
+            setHsp(found[1]);
+    };
+    const updateLoad = (id, key, val) => setLoads((ls) => ls.map((l) => (l.id === id ? { ...l, [key]: val } : l)));
+    const addLoad = () => { setLoads((ls) => [...ls, { id: nextId, name: "Nouvel appareil", power: 50, qty: 1, hours: 1 }]); setNextId((n) => n + 1); };
+    const removeLoad = (id) => setLoads((ls) => ls.filter((l) => l.id !== id));
+    const recommendedTilt = Math.round(Math.abs(latitude));
+    const orientation = latitude >= 0 ? "Sud" : "Nord";
+    const calc = (0, React.useMemo)(() => {
+        const dailyEnergyWh = loads.reduce((s, l) => s + l.power * l.qty * l.hours, 0);
+        const maxInstantW = loads.reduce((s, l) => s + l.power * l.qty, 0);
+        const correctedEnergyWh = dailyEnergyWh / (efficiency / 100 || 1);
+        const effHsp = hsp * (tiltCorrection / 100);
+        const peakWp = effHsp > 0 ? (correctedEnergyWh * safetyFactor) / effHsp : 0;
+        const numPanels = panelWp > 0 ? Math.ceil(peakWp / panelWp) : 0;
+        const panelsSeries = panelVoltage > 0 ? Math.max(1, Math.ceil(systemVoltage / panelVoltage)) : 1;
+        const panelsParallel = Math.max(1, Math.ceil(numPanels / panelsSeries));
+        const totalPanels = panelsSeries * panelsParallel;
+        const battCapTotalAh = systemVoltage > 0 && dod > 0 ? (correctedEnergyWh * autonomyDays) / (systemVoltage * (dod / 100)) : 0;
+        const battSeries = batteryVoltage > 0 ? Math.max(1, Math.ceil(systemVoltage / batteryVoltage)) : 1;
+        const battParallel = batteryAh > 0 ? Math.max(1, Math.ceil(battCapTotalAh / batteryAh)) : 1;
+        const totalBatteries = battSeries * battParallel;
+        const regCurrentRaw = systemVoltage > 0 ? (peakWp * regMargin) / systemVoltage : 0;
+        const regulator = pickStandard(REGULATOR_SIZES, regCurrentRaw);
+        const inverterVA = maxInstantW * inverterMargin;
+        const currentPV = regCurrentRaw;
+        const currentBatt = systemVoltage > 0 ? inverterVA / systemVoltage : 0;
+        const dU = (systemVoltage * dropPct) / 100;
+        const sectionPVraw = dU > 0 ? (2 * distPV * currentPV) / (56 * dU) : 0;
+        const sectionBattraw = dU > 0 ? (2 * distBatt * currentBatt) / (56 * dU) : 0;
+        const sectionPV = pickStandard(CABLE_SIZES, sectionPVraw);
+        const sectionBatt = pickStandard(CABLE_SIZES, sectionBattraw);
+        // --- Protections ---
+        const vocStringTotal = panelVoc * panelsSeries * vocColdFactor;
+        const iscTotalDC = panelIsc * panelsParallel;
+        const stringFuseCalc = 1.25 * panelIsc;
+        const stringFuseStd = pickStandard(BREAKER_SIZES, stringFuseCalc);
+        const mainDCCalc = 1.25 * iscTotalDC;
+        const mainDCStd = pickStandard(BREAKER_SIZES, mainDCCalc);
+        const chargeBreakerCalc = 1.25 * regulator;
+        const chargeBreakerStd = pickStandard(BREAKER_SIZES, chargeBreakerCalc);
+        const dischargeBreakerCalc = 1.25 * currentBatt;
+        const dischargeBreakerStd = pickStandard(BREAKER_SIZES, dischargeBreakerCalc);
+        const acLineVoltage = acPhase === "tri" ? 400 : 230;
+        const iAC = acPhase === "tri" ? inverterVA / (Math.sqrt(3) * 400) : inverterVA / 230;
+        const acBreakerCalc = 1.25 * iAC;
+        const acBreakerStd = pickStandard(BREAKER_SIZES, acBreakerCalc);
+        const maxActiveSection = Math.max(sectionPV, sectionBatt);
+        const earthSectionCalc = maxActiveSection <= 16 ? maxActiveSection : maxActiveSection <= 35 ? 16 : maxActiveSection / 2;
+        const earthSectionStd = pickStandard(CABLE_SIZES, earthSectionCalc);
+        const spdType = highLightningRisk ? "Type 1 + 2" : "Type 2";
+        return {
+            dailyEnergyWh, maxInstantW, correctedEnergyWh, effHsp, peakWp,
+            numPanels, panelsSeries, panelsParallel, totalPanels,
+            battCapTotalAh, battSeries, battParallel, totalBatteries,
+            regCurrentRaw, regulator, inverterVA, currentPV, currentBatt,
+            sectionPV, sectionPVraw, sectionBatt, sectionBattraw,
+            vocStringTotal, iscTotalDC, stringFuseCalc, stringFuseStd,
+            mainDCCalc, mainDCStd, chargeBreakerCalc, chargeBreakerStd,
+            dischargeBreakerCalc, dischargeBreakerStd, acLineVoltage, iAC, acBreakerCalc, acBreakerStd,
+            earthSectionCalc, earthSectionStd, spdType,
+        };
+    }, [loads, systemVoltage, autonomyDays, dod, efficiency, hsp, tiltCorrection, safetyFactor, panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin, distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk]);
+    const devisRows = (0, React.useMemo)(() => {
+        const rows = [
+            { id: "panels", label: `Panneau solaire ${panelWp} Wc`, qty: calc.totalPanels, unit: "u" },
+            { id: "batteries", label: `Batterie ${batteryAh} Ah / ${batteryVoltage} V`, qty: calc.totalBatteries, unit: "u" },
+            { id: "regulator", label: `Régulateur de charge ${calc.regulator} A`, qty: 1, unit: "u" },
+            { id: "inverter", label: `Onduleur ${fmt(calc.inverterVA)} VA`, qty: 1, unit: "u" },
+            { id: "cablePV", label: `Câble PV → régulateur (${calc.sectionPV} mm²)`, qty: distPV * 2, unit: "m" },
+            { id: "cableBatt", label: `Câble batterie → onduleur (${calc.sectionBatt} mm²)`, qty: distBatt * 2, unit: "m" },
+            { id: "stringFuse", label: `Fusible gPV ${calc.stringFuseStd} A`, qty: calc.panelsParallel > 1 ? calc.panelsParallel : 0, unit: "u" },
+            { id: "mainDC", label: `Sectionneur/disjoncteur DC général ${calc.mainDCStd} A`, qty: 1, unit: "u" },
+            { id: "chargeBreaker", label: `Disjoncteur DC charge ${calc.chargeBreakerStd} A`, qty: 1, unit: "u" },
+            { id: "dischargeBreaker", label: `Disjoncteur/sectionneur DC décharge ${calc.dischargeBreakerStd} A`, qty: 1, unit: "u" },
+            { id: "spdDC", label: `Parafoudre DC ${calc.spdType}`, qty: 1, unit: "u" },
+            { id: "acBreaker", label: `Disjoncteur AC ${calc.acBreakerStd} A`, qty: 1, unit: "u" },
+            { id: "acSwitch", label: `Interrupteur-sectionneur AC général ${calc.acBreakerStd} A`, qty: 1, unit: "u" },
+            { id: "spdAC", label: `Parafoudre AC ${calc.spdType}`, qty: 1, unit: "u" },
+            { id: "earthing", label: `Mise à la terre (${calc.earthSectionStd} mm²)`, qty: 1, unit: "forfait" },
+            { id: "coffrets", label: "Coffrets DC / AC", qty: 2, unit: "u" },
+        ];
+        return rows
+            .filter((r) => r.qty > 0)
+            .map((r) => {
+            const priceXOF = devisPrices[r.id] || 0;
+            return { ...r, priceXOF, totalXOF: r.qty * priceXOF };
+        });
+    }, [calc, devisPrices, distPV, distBatt, panelWp, batteryAh, batteryVoltage]);
+    const extraRowsComputed = extraItems.map((it) => ({ ...it, totalXOF: it.qty * it.price }));
+    const devisMaterialTotalXOF = devisRows.reduce((s, r) => s + r.totalXOF, 0) + extraRowsComputed.reduce((s, r) => s + r.totalXOF, 0);
+    const devisGrandTotalXOF = devisMaterialTotalXOF + laborCost;
+    // Sauvegarde locale (persistance entre les ouvertures de l'app sur le téléphone)
+    const STORAGE_KEY = "solar-sizer-data-v2";
+    const didLoad = React.useRef(false);
+    React.useEffect(() => {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+                const s = JSON.parse(raw);
+                if (s.brand !== undefined) setBrand(s.brand);
+                if (s.purchaseLink !== undefined) setPurchaseLink(s.purchaseLink);
+                if (s.logo !== undefined) setLogo(s.logo);
+                if (s.clientName !== undefined) setClientName(s.clientName);
+                if (s.projectAddress !== undefined) setProjectAddress(s.projectAddress);
+                if (s.paywallEnabled !== undefined) setPaywallEnabled(s.paywallEnabled);
+                if (s.accessCode !== undefined) setAccessCode(s.accessCode);
+                if (s.loads !== undefined) setLoads(s.loads);
+                if (s.nextId !== undefined) setNextId(s.nextId);
+                if (s.continent !== undefined) setContinent(s.continent);
+                if (s.country !== undefined) setCountry(s.country);
+                if (s.hsp !== undefined) setHsp(s.hsp);
+                if (s.latitude !== undefined) setLatitude(s.latitude);
+                if (s.tiltCorrection !== undefined) setTiltCorrection(s.tiltCorrection);
+                if (s.systemVoltage !== undefined) setSystemVoltage(s.systemVoltage);
+                if (s.autonomyDays !== undefined) setAutonomyDays(s.autonomyDays);
+                if (s.dod !== undefined) setDod(s.dod);
+                if (s.efficiency !== undefined) setEfficiency(s.efficiency);
+                if (s.safetyFactor !== undefined) setSafetyFactor(s.safetyFactor);
+                if (s.panelWp !== undefined) setPanelWp(s.panelWp);
+                if (s.panelVoltage !== undefined) setPanelVoltage(s.panelVoltage);
+                if (s.batteryAh !== undefined) setBatteryAh(s.batteryAh);
+                if (s.batteryVoltage !== undefined) setBatteryVoltage(s.batteryVoltage);
+                if (s.inverterMargin !== undefined) setInverterMargin(s.inverterMargin);
+                if (s.regMargin !== undefined) setRegMargin(s.regMargin);
+                if (s.distPV !== undefined) setDistPV(s.distPV);
+                if (s.distBatt !== undefined) setDistBatt(s.distBatt);
+                if (s.dropPct !== undefined) setDropPct(s.dropPct);
+                if (s.panelIsc !== undefined) setPanelIsc(s.panelIsc);
+                if (s.panelVoc !== undefined) setPanelVoc(s.panelVoc);
+                if (s.vocColdFactor !== undefined) setVocColdFactor(s.vocColdFactor);
+                if (s.acPhase !== undefined) setAcPhase(s.acPhase);
+                if (s.highLightningRisk !== undefined) setHighLightningRisk(s.highLightningRisk);
+                if (s.devisCurrency !== undefined) setDevisCurrency(s.devisCurrency);
+                if (s.devisPrices !== undefined) setDevisPrices(s.devisPrices);
+                if (s.laborCost !== undefined) setLaborCost(s.laborCost);
+                if (s.extraItems !== undefined) setExtraItems(s.extraItems);
+                if (s.nextExtraId !== undefined) setNextExtraId(s.nextExtraId);
+            }
+        }
+        catch (e) { /* ignore corrupted storage */ }
+        didLoad.current = true;
+    }, []);
+    React.useEffect(() => {
+        if (!didLoad.current) return;
+        const snapshot = {
+            brand, purchaseLink, logo, clientName, projectAddress, paywallEnabled, accessCode,
+            loads, nextId, continent, country, hsp, latitude, tiltCorrection,
+            systemVoltage, autonomyDays, dod, efficiency, safetyFactor,
+            panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin,
+            distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk,
+            devisCurrency, devisPrices, laborCost, extraItems, nextExtraId,
+        };
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+        }
+        catch (e) { /* quota ou logo trop lourd */ }
+    }, [brand, purchaseLink, logo, clientName, projectAddress, paywallEnabled, accessCode,
+        loads, nextId, continent, country, hsp, latitude, tiltCorrection,
+        systemVoltage, autonomyDays, dod, efficiency, safetyFactor,
+        panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin,
+        distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk,
+        devisCurrency, devisPrices, laborCost, extraItems, nextExtraId]);
+    const printProps = {
+        brand, logo, clientName, projectAddress, dateStr, loads, calc, country, continent,
+        hsp, tiltCorrection, latitude, recommendedTilt, orientation,
+        systemVoltage, autonomyDays, dod, efficiency, panelWp, panelVoltage, batteryAh, batteryVoltage,
+        panelIsc, panelVoc, acPhase, highLightningRisk,
+        devisRows, extraRowsComputed, laborCost, devisMaterialTotalXOF, devisGrandTotalXOF, devisCurrency,
+    };
+    return (React.createElement("div", { style: { background: C.bg, minHeight: "100%", fontFamily: SANS }, className: "w-full p-4 sm:p-6" },
+        React.createElement("style", null, `
+        .print-only { display: none; }
+        @media print {
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+        }
+      `),
+        React.createElement(PrintReport, { ...printProps }),
+        React.createElement("div", { className: "no-print" },
+            React.createElement("div", { className: "mb-5" },
+                React.createElement("div", { style: { color: C.amber, fontFamily: MONO }, className: "text-[11px] uppercase tracking-[0.2em] mb-1" },
+                    brand,
+                    " \u00B7 Outil d'ing\u00E9nierie"),
+                React.createElement("h1", { style: { color: C.text }, className: "text-2xl font-bold tracking-tight" }, "Dimensionnement Solaire"),
+                React.createElement("p", { style: { color: C.muted }, className: "text-sm mt-1" }, "Valable pour n'importe quel pays et n'importe quelle charge. Choisis ta localisation, renseigne tes appareils : chaque r\u00E9sultat affiche sa formule et son calcul.")),
+            React.createElement(Section, { n: "00", title: "Marque & acc\u00E8s", subtitle: "R\u00E9glages pour distribuer ou vendre cet outil.", accent: C.teal },
+                React.createElement("div", { className: "grid sm:grid-cols-2 gap-3 mb-3" },
+                    React.createElement(Field, { label: "Nom de la marque / du produit" },
+                        React.createElement(TextInput, { value: brand, onChange: setBrand })),
+                    React.createElement(Field, { label: "Lien d'achat / boutique" },
+                        React.createElement(TextInput, { value: purchaseLink, onChange: setPurchaseLink, mono: true }))),
+                React.createElement("div", { className: "grid sm:grid-cols-3 gap-3 mb-3" },
+                    React.createElement(Field, { label: "Logo de l'entreprise", hint: "pour le PDF" },
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("label", { className: "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md cursor-pointer", style: { color: C.teal, border: `1px solid ${C.border}`, fontFamily: SANS } },
+                                React.createElement(ImageIcon, { size: 13 }),
+                                " Choisir",
+                                React.createElement("input", { type: "file", accept: "image/*", onChange: handleLogoUpload, className: "hidden" })),
+                            logo && React.createElement("img", { src: logo, alt: "logo", className: "h-8 rounded", style: { background: "#fff", padding: 2 } }))),
+                    React.createElement(Field, { label: "Nom du client" },
+                        React.createElement(TextInput, { value: clientName, onChange: setClientName })),
+                    React.createElement(Field, { label: "Adresse / projet" },
+                        React.createElement(TextInput, { value: projectAddress, onChange: setProjectAddress }))),
+                React.createElement("div", { className: "flex flex-wrap items-center gap-3" },
+                    React.createElement("button", { onClick: handleDownloadPdf, disabled: pdfLoading, className: "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium disabled:opacity-60", style: { color: C.bg, background: C.amber, fontFamily: SANS } },
+                        React.createElement(Download, { size: 13 }),
+                        " ",
+                        pdfLoading ? "Génération du PDF…" : "Télécharger le PDF"),
+                    React.createElement("button", { onClick: () => window.print(), className: "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md", style: { color: C.teal, border: `1px solid ${C.border}`, fontFamily: SANS } }, "Aper\u00E7u \u00E0 imprimer"),
+                    React.createElement("label", { className: "flex items-center gap-2 text-xs cursor-pointer", style: { color: C.text, fontFamily: SANS } },
+                        React.createElement("input", { type: "checkbox", checked: paywallEnabled, onChange: (e) => setPaywallEnabled(e.target.checked) }),
+                        "Activer le verrouillage payant (r\u00E9sultats masqu\u00E9s sans code)"),
+                    paywallEnabled && (React.createElement("div", { className: "flex items-center gap-2" },
+                        React.createElement("span", { style: { color: C.muted, fontFamily: SANS }, className: "text-xs" }, "Code d'acc\u00E8s :"),
+                        React.createElement("div", { style: { width: 160 } },
+                            React.createElement(TextInput, { value: accessCode, onChange: setAccessCode, mono: true }))))),
+                pdfError && (React.createElement("p", { style: { color: C.danger, fontFamily: SANS }, className: "text-[11px] mt-2" }, pdfError)),
+                React.createElement("p", { style: { color: C.muted, fontFamily: SANS }, className: "text-[11px] mt-2 flex items-start gap-1.5" },
+                    React.createElement(Info, { size: 12, className: "mt-0.5 shrink-0" }),
+                    "Ce verrou masque le contenu c\u00F4t\u00E9 client \u2014 pratique pour distribuer un fichier \u00AB d\u00E9mo \u00BB et livrer le code apr\u00E8s achat (sur Chariow par exemple), mais il n'encaisse pas de paiement lui-m\u00EAme : il n'est pas infranchissable pour un utilisateur technique.")),
+            React.createElement(Section, { n: "01", title: "Localisation & irradiation", subtitle: "L'irradiation solaire (HSP) change selon le pays \u2014 et l'inclinaison/orientation du champ influence le rendement r\u00E9el." },
+                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3" },
+                    React.createElement(Field, { label: "Continent" },
+                        React.createElement(Select, { value: continent, onChange: onContinentChange, options: Object.keys(REGIONS) })),
+                    React.createElement(Field, { label: "Pays" },
+                        React.createElement(Select, { value: country, onChange: onCountryChange, options: countryOptions })),
+                    React.createElement(Field, { label: "HSP (irradiation)", hint: "kWh/m\u00B2/j \u2014 modifiable" },
+                        React.createElement(NumInput, { value: hsp, onChange: setHsp, step: 0.1, suffix: "kWh/m\u00B2" })),
+                    React.createElement(Field, { label: "Latitude du site", hint: "\u00B0 \u2014 ex. 6.4 pour Cotonou" },
+                        React.createElement(NumInput, { value: latitude, onChange: setLatitude, step: 0.1 }))),
+                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-3 gap-3" },
+                    React.createElement(Field, { label: "Inclinaison optimale conseill\u00E9e", hint: "\u2248 latitude du site" },
+                        React.createElement("div", { className: "rounded-md px-2 py-1.5 text-sm", style: { background: C.panel2, border: `1px solid ${C.border}`, color: C.teal, fontFamily: MONO } },
+                            recommendedTilt,
+                            "\u00B0")),
+                    React.createElement(Field, { label: "Orientation conseill\u00E9e" },
+                        React.createElement("div", { className: "rounded-md px-2 py-1.5 text-sm flex items-center gap-1.5", style: { background: C.panel2, border: `1px solid ${C.border}`, color: C.teal, fontFamily: MONO } },
+                            React.createElement(Compass, { size: 13 }),
+                            " Face au ",
+                            orientation)),
+                    React.createElement(Field, { label: "Correction inclinaison/orientation", hint: "100% = installation optimale" },
+                        React.createElement(NumInput, { value: tiltCorrection, onChange: setTiltCorrection, suffix: "%" }))),
+                React.createElement("p", { style: { color: C.muted, fontFamily: SANS }, className: "text-[11px] mt-3 flex items-start gap-1.5" },
+                    React.createElement(Info, { size: 12, className: "mt-0.5 shrink-0" }),
+                    "Le HSP par pays est une ",
+                    React.createElement("b", null, "moyenne nationale indicative"),
+                    " (fortes variations r\u00E9gionales possibles) \u2014 \u00E0 affiner avec PVGIS, NASA POWER ou un service m\u00E9t\u00E9orologique local. La r\u00E8gle \u00AB inclinaison \u2248 latitude, panneaux face \u00E0 l'\u00E9quateur \u00BB est une approximation courante ; si ton installation s'en \u00E9carte, r\u00E9duis le facteur de correction (ex. 90% pour une toiture mal orient\u00E9e).")),
+            React.createElement("div", { className: "rounded-xl p-4 mb-6", style: { background: C.panel, border: `1px solid ${C.border}` } },
+                React.createElement("svg", { viewBox: "0 0 720 190", className: "w-full h-auto" },
+                    React.createElement("defs", null,
+                        React.createElement("style", null, `.flow{stroke-dasharray:6 6;animation:dash 1.4s linear infinite}@keyframes dash{to{stroke-dashoffset:-24}}`)),
+                    React.createElement("line", { x1: "95", y1: "95", x2: "185", y2: "95", stroke: C.amber, strokeWidth: "2", className: "flow" }),
+                    React.createElement("line", { x1: "255", y1: "95", x2: "345", y2: "95", stroke: C.amber, strokeWidth: "2", className: "flow" }),
+                    React.createElement("line", { x1: "415", y1: "95", x2: "480", y2: "95", stroke: C.teal, strokeWidth: "2", className: "flow" }),
+                    React.createElement("line", { x1: "480", y1: "95", x2: "480", y2: "60", stroke: C.teal, strokeWidth: "2" }),
+                    React.createElement("line", { x1: "480", y1: "60", x2: "555", y2: "60", stroke: C.teal, strokeWidth: "2", className: "flow" }),
+                    React.createElement("line", { x1: "480", y1: "95", x2: "480", y2: "130", stroke: C.teal, strokeWidth: "2" }),
+                    React.createElement("line", { x1: "480", y1: "130", x2: "555", y2: "130", stroke: C.teal, strokeWidth: "2", className: "flow" }),
+                    React.createElement("line", { x1: "625", y1: "60", x2: "690", y2: "95", stroke: C.amber, strokeWidth: "2", className: "flow" }),
+                    React.createElement("line", { x1: "625", y1: "130", x2: "690", y2: "95", stroke: C.amber, strokeWidth: "2", className: "flow" }),
+                    React.createElement("g", { transform: "translate(50,95)" },
+                        React.createElement("circle", { r: "26", fill: "none", stroke: C.amber, strokeWidth: "2" }),
+                        React.createElement(Sun, { size: 26, x: "-13", y: "-13", color: C.amber })),
+                    React.createElement("g", { transform: "translate(220,95)" },
+                        React.createElement("rect", { x: "-38", y: "-30", width: "76", height: "60", rx: "6", fill: C.panel2, stroke: C.amber, strokeWidth: "1.5" }),
+                        React.createElement("text", { x: "0", y: "-38", textAnchor: "middle", fill: C.text, fontSize: "11", fontFamily: SANS, fontWeight: "600" }, "Panneaux"),
+                        React.createElement("text", { x: "0", y: "4", textAnchor: "middle", fill: C.amber, fontSize: "13", fontFamily: MONO, fontWeight: "700" },
+                            fmt(calc.peakWp),
+                            " Wc"),
+                        React.createElement("text", { x: "0", y: "20", textAnchor: "middle", fill: C.muted, fontSize: "10", fontFamily: MONO },
+                            calc.totalPanels,
+                            "\u00D7 ",
+                            panelWp,
+                            "Wc")),
+                    React.createElement("g", { transform: "translate(380,95)" },
+                        React.createElement("rect", { x: "-35", y: "-30", width: "70", height: "60", rx: "6", fill: C.panel2, stroke: C.teal, strokeWidth: "1.5" }),
+                        React.createElement("text", { x: "0", y: "-38", textAnchor: "middle", fill: C.text, fontSize: "11", fontFamily: SANS, fontWeight: "600" }, "R\u00E9gulateur"),
+                        React.createElement("text", { x: "0", y: "4", textAnchor: "middle", fill: C.teal, fontSize: "13", fontFamily: MONO, fontWeight: "700" },
+                            calc.regulator,
+                            " A"),
+                        React.createElement("text", { x: "0", y: "20", textAnchor: "middle", fill: C.muted, fontSize: "10", fontFamily: MONO },
+                            fmt(calc.regCurrentRaw, 1),
+                            " A calc.")),
+                    React.createElement("g", { transform: "translate(555,60)" },
+                        React.createElement("rect", { x: "-38", y: "-24", width: "76", height: "48", rx: "6", fill: C.panel2, stroke: C.teal, strokeWidth: "1.5" }),
+                        React.createElement("text", { x: "0", y: "-30", textAnchor: "middle", fill: C.text, fontSize: "11", fontFamily: SANS, fontWeight: "600" }, "Batterie"),
+                        React.createElement("text", { x: "0", y: "4", textAnchor: "middle", fill: C.teal, fontSize: "12", fontFamily: MONO, fontWeight: "700" },
+                            fmt(calc.battCapTotalAh),
+                            " Ah")),
+                    React.createElement("g", { transform: "translate(555,130)" },
+                        React.createElement("rect", { x: "-38", y: "-24", width: "76", height: "48", rx: "6", fill: C.panel2, stroke: C.amber, strokeWidth: "1.5" }),
+                        React.createElement("text", { x: "0", y: "42", textAnchor: "middle", fill: C.text, fontSize: "11", fontFamily: SANS, fontWeight: "600" }, "Onduleur"),
+                        React.createElement("text", { x: "0", y: "4", textAnchor: "middle", fill: C.amber, fontSize: "12", fontFamily: MONO, fontWeight: "700" },
+                            fmt(calc.inverterVA),
+                            " VA")),
+                    React.createElement("g", { transform: "translate(690,95)" },
+                        React.createElement("circle", { r: "24", fill: "none", stroke: C.amber, strokeWidth: "2" }),
+                        React.createElement(Plug, { size: 22, x: "-11", y: "-11", color: C.amber }),
+                        React.createElement("text", { x: "0", y: "42", textAnchor: "middle", fill: C.muted, fontSize: "10", fontFamily: MONO },
+                            fmt(calc.dailyEnergyWh),
+                            " Wh/j"))),
+                React.createElement("div", { className: "flex flex-wrap gap-2 mt-3" },
+                    React.createElement(Stat, { icon: Sun, label: "Puissance cr\u00EAte", value: fmt(calc.peakWp), unit: "Wc" }),
+                    React.createElement(Stat, { icon: Battery, label: "Capacit\u00E9 batterie", value: fmt(calc.battCapTotalAh), unit: "Ah", accent: C.teal }),
+                    React.createElement(Stat, { icon: Gauge, label: "R\u00E9gulateur", value: calc.regulator, unit: "A", accent: C.teal }),
+                    React.createElement(Stat, { icon: Zap, label: "Onduleur", value: fmt(calc.inverterVA), unit: "VA" }))),
+            React.createElement(Section, { n: "02", title: "Charges \u00E0 alimenter", subtitle: "Ajoute chaque appareil, sa puissance, sa quantit\u00E9 et sa dur\u00E9e d'utilisation quotidienne." },
+                React.createElement("div", { className: "overflow-x-auto -mx-1" },
+                    React.createElement("table", { className: "w-full text-sm min-w-[560px]" },
+                        React.createElement("thead", null,
+                            React.createElement("tr", { style: { color: C.muted, fontFamily: SANS }, className: "text-[11px] uppercase tracking-wider text-left" },
+                                React.createElement("th", { className: "py-1 px-1 font-normal" }, "Appareil"),
+                                React.createElement("th", { className: "py-1 px-1 font-normal" }, "P (W)"),
+                                React.createElement("th", { className: "py-1 px-1 font-normal" }, "Qt\u00E9"),
+                                React.createElement("th", { className: "py-1 px-1 font-normal" }, "h/j"),
+                                React.createElement("th", { className: "py-1 px-1 font-normal text-right" }, "Wh/j"),
+                                React.createElement("th", { className: "py-1 px-1" }))),
+                        React.createElement("tbody", null, loads.map((l) => (React.createElement("tr", { key: l.id, style: { borderTop: `1px solid ${C.border}` } },
+                            React.createElement("td", { className: "py-1.5 px-1" },
+                                React.createElement("input", { value: l.name, onChange: (e) => updateLoad(l.id, "name", e.target.value), className: "w-full bg-transparent outline-none text-sm", style: { color: C.text } })),
+                            React.createElement("td", { className: "py-1.5 px-1 w-20" },
+                                React.createElement("input", { type: "number", value: l.power, onChange: (e) => updateLoad(l.id, "power", parseFloat(e.target.value) || 0), className: "w-full bg-transparent outline-none text-sm", style: { color: C.text, fontFamily: MONO } })),
+                            React.createElement("td", { className: "py-1.5 px-1 w-14" },
+                                React.createElement("input", { type: "number", value: l.qty, onChange: (e) => updateLoad(l.id, "qty", parseFloat(e.target.value) || 0), className: "w-full bg-transparent outline-none text-sm", style: { color: C.text, fontFamily: MONO } })),
+                            React.createElement("td", { className: "py-1.5 px-1 w-14" },
+                                React.createElement("input", { type: "number", value: l.hours, onChange: (e) => updateLoad(l.id, "hours", parseFloat(e.target.value) || 0), className: "w-full bg-transparent outline-none text-sm", style: { color: C.text, fontFamily: MONO } })),
+                            React.createElement("td", { className: "py-1.5 px-1 text-right", style: { color: C.amber, fontFamily: MONO } }, fmt(l.power * l.qty * l.hours)),
+                            React.createElement("td", { className: "py-1.5 px-1 text-right" },
+                                React.createElement("button", { onClick: () => removeLoad(l.id), "aria-label": "Supprimer" },
+                                    React.createElement(Trash2, { size: 15, color: C.danger }))))))))),
+                React.createElement("div", { className: "flex items-center justify-between mt-3" },
+                    React.createElement("button", { onClick: addLoad, className: "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md", style: { color: C.teal, border: `1px solid ${C.border}`, fontFamily: SANS } },
+                        React.createElement(Plus, { size: 13 }),
+                        " Ajouter un appareil"),
+                    React.createElement("div", { style: { fontFamily: MONO, color: C.text }, className: "text-sm" },
+                        "Total : ",
+                        React.createElement("b", { style: { color: C.amber } },
+                            fmt(calc.dailyEnergyWh),
+                            " Wh/j"),
+                        React.createElement("span", { style: { color: C.muted } },
+                            " \u00B7 pointe ",
+                            fmt(calc.maxInstantW),
+                            " W")))),
+            React.createElement(Section, { n: "03", title: "Param\u00E8tres du syst\u00E8me" },
+                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4" },
+                    React.createElement(Field, { label: "Tension syst\u00E8me" },
+                        React.createElement(Select, { value: systemVoltage, onChange: (v) => setSystemVoltage(parseFloat(v)), options: [12, 24, 48] })),
+                    React.createElement(Field, { label: "Autonomie", hint: "jours" },
+                        React.createElement(NumInput, { value: autonomyDays, onChange: setAutonomyDays, step: 0.5 })),
+                    React.createElement(Field, { label: "D\u00E9charge max (DOD)", hint: "50% Pb-acide \u00B7 80% Li-ion" },
+                        React.createElement(NumInput, { value: dod, onChange: setDod, suffix: "%" })),
+                    React.createElement(Field, { label: "Rendement syst\u00E8me", hint: "c\u00E2blage + r\u00E9gulateur + onduleur" },
+                        React.createElement(NumInput, { value: efficiency, onChange: setEfficiency, suffix: "%" })),
+                    React.createElement(Field, { label: "Coeff. de s\u00E9curit\u00E9 panneaux" },
+                        React.createElement(NumInput, { value: safetyFactor, onChange: setSafetyFactor, step: 0.05 })),
+                    React.createElement(Field, { label: "Marge r\u00E9gulateur" },
+                        React.createElement(NumInput, { value: regMargin, onChange: setRegMargin, step: 0.05 })),
+                    React.createElement(Field, { label: "Marge onduleur" },
+                        React.createElement(NumInput, { value: inverterMargin, onChange: setInverterMargin, step: 0.05 }))),
+                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" },
+                    React.createElement(Field, { label: "Panneau \u2014 Wc unitaire" },
+                        React.createElement(NumInput, { value: panelWp, onChange: setPanelWp, step: 10, suffix: "Wc" })),
+                    React.createElement(Field, { label: "Panneau \u2014 tension nominale" },
+                        React.createElement(Select, { value: panelVoltage, onChange: (v) => setPanelVoltage(parseFloat(v)), options: [12, 24] })),
+                    React.createElement(Field, { label: "Batterie \u2014 capacit\u00E9 unitaire" },
+                        React.createElement(NumInput, { value: batteryAh, onChange: setBatteryAh, step: 10, suffix: "Ah" })),
+                    React.createElement(Field, { label: "Batterie \u2014 tension unitaire" },
+                        React.createElement(Select, { value: batteryVoltage, onChange: (v) => setBatteryVoltage(parseFloat(v)), options: [2, 6, 12] }))),
+                React.createElement("div", { style: { borderTop: `1px dashed ${C.border}` }, className: "grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4 pt-4" },
+                    React.createElement(Field, { label: "Isc panneau unitaire", hint: "A \u2014 datasheet" },
+                        React.createElement(NumInput, { value: panelIsc, onChange: setPanelIsc, step: 0.1, suffix: "A" })),
+                    React.createElement(Field, { label: "Voc panneau unitaire", hint: "V \u2014 datasheet" },
+                        React.createElement(NumInput, { value: panelVoc, onChange: setPanelVoc, step: 0.5, suffix: "V" })),
+                    React.createElement(Field, { label: "Coeff. Voc \u00E0 froid" },
+                        React.createElement(NumInput, { value: vocColdFactor, onChange: setVocColdFactor, step: 0.01 })),
+                    React.createElement(Field, { label: "R\u00E9seau AC sortie onduleur" },
+                        React.createElement(Select, { value: acPhase, onChange: setAcPhase, options: ["mono", "tri"], labels: ["230V monophasé", "400V triphasé"] })),
+                    React.createElement(Field, { label: "Zone \u00E0 risque de foudre \u00E9lev\u00E9" },
+                        React.createElement("label", { className: "flex items-center gap-2 text-xs cursor-pointer h-[34px]", style: { color: C.text, fontFamily: SANS } },
+                            React.createElement("input", { type: "checkbox", checked: highLightningRisk, onChange: (e) => setHighLightningRisk(e.target.checked) }),
+                            " Oui")))),
+            !unlocked ? (React.createElement("div", { className: "rounded-xl p-8 text-center mb-6", style: { background: C.panel, border: `1px solid ${C.border}` } },
+                React.createElement(Lock, { size: 22, color: C.amber, className: "mx-auto mb-2" }),
+                React.createElement("p", { style: { color: C.text, fontFamily: SANS }, className: "text-sm font-medium mb-1" }, "R\u00E9sultats d\u00E9taill\u00E9s verrouill\u00E9s"),
+                React.createElement("p", { style: { color: C.muted, fontFamily: SANS }, className: "text-xs mb-3" }, "D\u00E9bloque le calcul complet (panneaux, batteries, r\u00E9gulateur, onduleur, c\u00E2blage) avec ton code d'acc\u00E8s."),
+                React.createElement("div", { className: "flex items-center justify-center gap-2 max-w-xs mx-auto" },
+                    React.createElement("div", { className: "flex-1" },
+                        React.createElement(TextInput, { value: enteredCode, onChange: setEnteredCode, mono: true }))),
+                React.createElement("a", { href: purchaseLink, target: "_blank", rel: "noreferrer", style: { color: C.teal, fontFamily: SANS }, className: "text-xs underline mt-3 inline-block" }, "Pas encore de code ? Obtenir l'acc\u00E8s \u2192"))) : (React.createElement(React.Fragment, null,
+                React.createElement(Section, { n: "04", title: "R\u00E9sultats d\u00E9taill\u00E9s \u2014 formules & calculs", subtitle: "Chaque valeur affiche la formule utilis\u00E9e et le calcul avec tes propres chiffres.", accent: C.teal },
+                    React.createElement("div", { className: "flex items-center gap-1.5 mb-1", style: { color: C.amber } },
+                        React.createElement(Unlock, { size: 13 }),
+                        React.createElement("span", { style: { fontFamily: SANS }, className: "text-xs" }, "Contenu d\u00E9bloqu\u00E9")),
+                    React.createElement(Formula, { label: "\u00C9nergie journali\u00E8re corrig\u00E9e", formula: "Ec' = Ec / \u03B7", sub: `= ${fmt(calc.dailyEnergyWh)} Wh ÷ ${efficiency}%`, result: fmt(calc.correctedEnergyWh), unit: "Wh/j" }),
+                    React.createElement(Formula, { label: "Irradiation effective retenue", formula: "HSPeff = HSP \u00D7 correction", sub: `= ${hsp} × ${tiltCorrection}%`, result: fmt(calc.effHsp, 2), unit: "kWh/m\u00B2/j", accent: C.teal }),
+                    React.createElement(Formula, { label: "Puissance cr\u00EAte du champ photovolta\u00EFque", formula: "Pc = (Ec' \u00D7 Ks) / HSPeff", sub: `= (${fmt(calc.correctedEnergyWh)} × ${safetyFactor}) ÷ ${fmt(calc.effHsp, 2)}`, result: fmt(calc.peakWp), unit: "Wc" }),
+                    React.createElement(Formula, { label: "Nombre de panneaux", formula: "Np = Pc / Wc_unitaire \u2192 arrangement Ns \u00D7 Npar", sub: `= ${fmt(calc.peakWp)} ÷ ${panelWp} → ${calc.panelsSeries} série × ${calc.panelsParallel} parallèle`, result: calc.totalPanels, unit: "panneaux" }),
+                    React.createElement(Formula, { label: "Capacit\u00E9 de batterie requise", formula: "Cbat = (Ec' \u00D7 N) / (Usys \u00D7 DOD)", sub: `= (${fmt(calc.correctedEnergyWh)} × ${autonomyDays}) ÷ (${systemVoltage} × ${dod}%)`, result: fmt(calc.battCapTotalAh), unit: "Ah", accent: C.teal }),
+                    React.createElement(Formula, { label: "Nombre de batteries", formula: "Nbat = arrangement Ns \u00D7 Npar", sub: `Ns = Usys/Ubat = ${calc.battSeries} · Npar = Cbat/Cunitaire = ${calc.battParallel}`, result: calc.totalBatteries, unit: "batteries", accent: C.teal }),
+                    React.createElement(Formula, { label: "Courant du r\u00E9gulateur", formula: "Ireg = (Pc \u00D7 marge) / Usys", sub: `= (${fmt(calc.peakWp)} × ${regMargin}) ÷ ${systemVoltage}`, result: `${fmt(calc.regCurrentRaw, 1)} A calc. → ${calc.regulator} A normalisé`, unit: "", accent: C.teal }),
+                    React.createElement(Formula, { label: "Puissance de l'onduleur", formula: "Pond = Pmax_simultan\u00E9e \u00D7 marge", sub: `= ${fmt(calc.maxInstantW)} × ${inverterMargin}`, result: fmt(calc.inverterVA), unit: "VA" })),
+                React.createElement(Section, { n: "05", title: "Section des c\u00E2bles \u2014 formules & calculs", subtitle: "S = (2 \u00D7 L \u00D7 I) / (56 \u00D7 \u0394U), avec \u0394U = Usys \u00D7 chute admissible." },
+                    React.createElement("div", { className: "grid sm:grid-cols-3 gap-3 mb-3" },
+                        React.createElement(Field, { label: "Longueur panneaux \u2192 r\u00E9gulateur", hint: "m" },
+                            React.createElement(NumInput, { value: distPV, onChange: setDistPV })),
+                        React.createElement(Field, { label: "Longueur batterie \u2192 onduleur", hint: "m" },
+                            React.createElement(NumInput, { value: distBatt, onChange: setDistBatt })),
+                        React.createElement(Field, { label: "Chute de tension admissible" },
+                            React.createElement(NumInput, { value: dropPct, onChange: setDropPct, step: 0.5, suffix: "%" }))),
+                    React.createElement(Formula, { label: "C\u00E2ble PV \u2192 r\u00E9gulateur", formula: "S = (2 \u00D7 L \u00D7 I) / (56 \u00D7 \u0394U)", sub: `= (2 × ${distPV} × ${fmt(calc.currentPV, 1)}) ÷ (56 × ${fmt((systemVoltage * dropPct) / 100, 2)})`, result: `${fmt(calc.sectionPVraw, 2)} mm² calc. → ${calc.sectionPV} mm² normalisé`, unit: "" }),
+                    React.createElement(Formula, { label: "C\u00E2ble batterie \u2192 onduleur", formula: "S = (2 \u00D7 L \u00D7 I) / (56 \u00D7 \u0394U)", sub: `= (2 × ${distBatt} × ${fmt(calc.currentBatt, 1)}) ÷ (56 × ${fmt((systemVoltage * dropPct) / 100, 2)})`, result: `${fmt(calc.sectionBattraw, 2)} mm² calc. → ${calc.sectionBatt} mm² normalisé`, unit: "", accent: C.teal })),
+                React.createElement(Section, { n: "06", title: "Protections & s\u00E9curit\u00E9 de l'installation", subtitle: "Fusibles, disjoncteurs, sectionneurs, parafoudres et mise \u00E0 la terre \u2014 crit\u00E8re de choix, calcul et type recommand\u00E9 pour chaque organe.", accent: C.teal },
+                    React.createElement(ProtectionRow, { label: "Fusible de cha\u00EEne DC (coffret DC)", formula: calc.panelsParallel > 1 ? "If = 1.25 × Isc_unitaire" : null, sub: calc.panelsParallel > 1 ? `= 1.25 × ${panelIsc} A` : null, result: calc.panelsParallel > 1 ? calc.stringFuseStd : null, unit: calc.panelsParallel > 1 ? "A" : "", note: calc.panelsParallel > 1
+                            ? `Fusible type gPV (dédié DC photovoltaïque), un par chaîne — ${calc.panelsParallel} chaînes en parallèle. Ne pas utiliser un fusible AC (gG) : coupure d'arc DC insuffisante.`
+                            : "Une seule chaîne de panneaux (pas de parallèle) : fusible de chaîne non nécessaire, la protection est assurée par le sectionneur/disjoncteur DC général." }),
+                    React.createElement(ProtectionRow, { label: "Sectionneur / disjoncteur DC g\u00E9n\u00E9ral (champ PV \u2192 r\u00E9gulateur)", formula: "IDC = 1.25 \u00D7 Isc_total ; UDC \u2265 Voc_total \u00D7 coeff. froid", sub: `= 1.25 × (${panelIsc} × ${calc.panelsParallel}) = 1.25 × ${fmt(calc.iscTotalDC, 1)} A ; U ≥ ${panelVoc} × ${calc.panelsSeries} × ${vocColdFactor}`, result: `${calc.mainDCStd} A · tenue ≥ ${fmt(calc.vocStringTotal)} V`, unit: "", note: "Sectionneur-disjoncteur DC bipolaire avec pouvoir de coupure en charge c\u00F4t\u00E9 continu, polarit\u00E9s clairement rep\u00E9r\u00E9es (+/\u2212)." }),
+                    React.createElement(ProtectionRow, { label: "Disjoncteur DC \u2014 r\u00E9gulateur \u2192 batterie (charge)", formula: "I = 1.25 \u00D7 Icalibre r\u00E9gulateur", sub: `= 1.25 × ${calc.regulator} A`, result: calc.chargeBreakerStd, unit: "A", note: "Disjoncteur DC d\u00E9di\u00E9 (jamais un mod\u00E8le AC standard) \u2014 coupure de l'arc continu et respect de la polarit\u00E9." }),
+                    React.createElement(ProtectionRow, { label: "Disjoncteur + sectionneur DC \u2014 batterie \u2192 onduleur (d\u00E9charge)", formula: "I = 1.25 \u00D7 Ibatterie (c\u00F4t\u00E9 onduleur)", sub: `= 1.25 × ${fmt(calc.currentBatt, 1)} A`, result: calc.dischargeBreakerStd, unit: "A", note: "Sectionneur de proximit\u00E9 batterie obligatoire (coupure d'urgence manuelle), associ\u00E9 au disjoncteur DC de m\u00EAme calibre." }),
+                    React.createElement(ProtectionRow, { label: "Parafoudre DC (entre champ PV et r\u00E9gulateur)", formula: "Uc \u2265 1.2 \u00D7 Voc_total", sub: `≥ 1.2 × ${fmt(calc.vocStringTotal)} V`, result: `${calc.spdType}`, unit: "", note: `Parafoudre ${calc.spdType} sur chaque polarité + terre, avec voyant de défaut. ${highLightningRisk ? "Zone à risque de foudre élevé → Type 1+2 conseillé." : "Risque standard → Type 2 suffisant ; passer en Type 1+2 si ligne aérienne longue ou zone kéraunique élevée."}` }),
+                    React.createElement(ProtectionRow, { label: "Disjoncteur AC (sortie onduleur)", formula: "IAC = Pond / U (mono) ou Pond / (\u221A3\u00D7U) (tri) ; Idisj = 1.25 \u00D7 IAC", sub: `IAC = ${fmt(calc.iAC, 1)} A (${acPhase === "tri" ? "400V triphasé" : "230V monophasé"}) → 1.25 × ${fmt(calc.iAC, 1)}`, result: calc.acBreakerStd, unit: "A", note: "Disjoncteur courbe C (usage g\u00E9n\u00E9ral onduleur), associ\u00E9 \u00E0 un diff\u00E9rentiel 30 mA de type A (ou type B si sp\u00E9cifi\u00E9 par le fabricant de l'onduleur \u2014 courants de fuite continus possibles)." }),
+                    React.createElement(ProtectionRow, { label: "Interrupteur-sectionneur g\u00E9n\u00E9ral AC", formula: "I \u2265 Idisjoncteur AC", sub: `≥ ${calc.acBreakerStd} A`, result: calc.acBreakerStd, unit: "A", note: "Sectionneur visible et cadenassable, bipolaire (mono) ou t\u00E9trapolaire (triphas\u00E9), pouvoir de coupure en charge \u2014 coupure g\u00E9n\u00E9rale avant intervention." }),
+                    React.createElement(ProtectionRow, { label: "Parafoudre AC (avant les charges)", formula: "Uc \u2265 1.1 \u00D7 Un", sub: `≥ 1.1 × ${calc.acLineVoltage} V`, result: `${calc.spdType}`, unit: "", note: "Parafoudre AC en t\u00EAte d'installation, associ\u00E9 \u00E0 la mise \u00E0 la terre \u2014 prot\u00E8ge l'onduleur et les charges sensibles." }),
+                    React.createElement(ProtectionRow, { label: "Mise \u00E0 la terre", formula: "S(terre) : = S(actif) si \u226416mm\u00B2 \u00B7 =16mm\u00B2 si 16\u201335mm\u00B2 \u00B7 =S(actif)/2 si >35mm\u00B2", sub: `Section active de référence = ${Math.max(calc.sectionPV, calc.sectionBatt)} mm²`, result: `${calc.earthSectionStd} mm² · résistance de terre visée ≤ 10 Ω`, unit: "", note: "Piquet(s) de terre ou boucle \u00E0 fond de fouille, conducteur cuivre (nu ou vert-jaune prot\u00E9g\u00E9), liaison \u00E9quipotentielle des masses m\u00E9talliques (ch\u00E2ssis panneaux, coffrets DC/AC, chemin de c\u00E2bles)." }),
+                    React.createElement(ProtectionRow, { label: "Coffrets de protection DC & AC", note: "Coffret DC : IP65 mini, fusibles/disjoncteurs DC + parafoudre DC + bornes de raccordement des cha\u00EEnes. Coffret AC : IP54/65, disjoncteur diff\u00E9rentiel + parafoudre AC + sectionneur g\u00E9n\u00E9ral \u2014 tous deux en amont/aval de l'onduleur, accessibles et rep\u00E9r\u00E9s." })),
+                React.createElement(Section, { n: "07", title: "Devis quantitatif et estimatif (DQE)", subtitle: "Quantit\u00E9s calcul\u00E9es automatiquement \u00E0 partir du dimensionnement. Prix par d\u00E9faut modifiables.", accent: C.amber },
+                    React.createElement("div", { className: "flex items-center justify-between mb-3 gap-3 flex-wrap" },
+                        React.createElement("span", { style: { color: C.muted, fontFamily: SANS }, className: "text-xs" }, "Prix unitaires \u00E9ditables ci-dessous."),
+                        React.createElement("div", { className: "w-36" },
+                            React.createElement(Select, { value: devisCurrency, onChange: setDevisCurrency, options: ["XOF", "EUR"], labels: ["Franc CFA (XOF)", "Euro (EUR)"] }))),
+                    React.createElement("div", { className: "overflow-x-auto -mx-1" },
+                        React.createElement("table", { className: "w-full text-xs", style: { borderCollapse: "collapse" } },
+                            React.createElement("thead", null,
+                                React.createElement("tr", { style: { color: C.muted, fontFamily: SANS }, className: "text-[10px] uppercase tracking-wider" },
+                                    React.createElement("th", { className: "text-left py-1.5 px-1" }, "D\u00E9signation"),
+                                    React.createElement("th", { className: "text-right py-1.5 px-1" }, "Qt\u00E9"),
+                                    React.createElement("th", { className: "text-left py-1.5 px-1" }, "Unit\u00E9"),
+                                    React.createElement("th", { className: "text-right py-1.5 px-1" }, "Prix unitaire"),
+                                    React.createElement("th", { className: "text-right py-1.5 px-1" }, "Montant"),
+                                    React.createElement("th", null))),
+                            React.createElement("tbody", null,
+                                devisRows.map((r) => (React.createElement("tr", { key: r.id, style: { borderTop: `1px dashed ${C.border}` } },
+                                    React.createElement("td", { className: "py-1.5 px-1", style: { color: C.text, fontFamily: SANS } }, r.label),
+                                    React.createElement("td", { className: "py-1.5 px-1 text-right", style: { color: C.text, fontFamily: MONO } }, fmt(r.qty, r.unit === "m" ? 1 : 0)),
+                                    React.createElement("td", { className: "py-1.5 px-1", style: { color: C.muted, fontFamily: MONO } }, r.unit),
+                                    React.createElement("td", { className: "py-1.5 px-1", style: { minWidth: 120 } },
+                                        React.createElement(NumInput, { value: round2(toDisplayAmount(r.priceXOF, devisCurrency)), onChange: (v) => updateDevisPrice(r.id, v), step: devisCurrency === "EUR" ? 0.01 : 100 })),
+                                    React.createElement("td", { className: "py-1.5 px-1 text-right whitespace-nowrap", style: { color: C.amber, fontFamily: MONO, fontWeight: 700 } }, fmtMoney(r.totalXOF, devisCurrency)),
+                                    React.createElement("td", null)))),
+                                extraRowsComputed.map((it) => (React.createElement("tr", { key: it.id, style: { borderTop: `1px dashed ${C.border}` } },
+                                    React.createElement("td", { className: "py-1.5 px-1" },
+                                        React.createElement(TextInput, { value: it.name, onChange: (v) => updateExtraItem(it.id, "name", v) })),
+                                    React.createElement("td", { className: "py-1.5 px-1", style: { minWidth: 60 } },
+                                        React.createElement(NumInput, { value: it.qty, onChange: (v) => updateExtraItem(it.id, "qty", v) })),
+                                    React.createElement("td", { className: "py-1.5 px-1", style: { minWidth: 70 } },
+                                        React.createElement(TextInput, { value: it.unit, onChange: (v) => updateExtraItem(it.id, "unit", v) })),
+                                    React.createElement("td", { className: "py-1.5 px-1", style: { minWidth: 120 } },
+                                        React.createElement(NumInput, { value: round2(toDisplayAmount(it.price, devisCurrency)), onChange: (v) => updateExtraItem(it.id, "price", fromDisplayAmount(v, devisCurrency)), step: devisCurrency === "EUR" ? 0.01 : 100 })),
+                                    React.createElement("td", { className: "py-1.5 px-1 text-right whitespace-nowrap", style: { color: C.amber, fontFamily: MONO, fontWeight: 700 } }, fmtMoney(it.totalXOF, devisCurrency)),
+                                    React.createElement("td", { className: "py-1.5 px-1 text-right" },
+                                        React.createElement("button", { onClick: () => removeExtraItem(it.id), "aria-label": "Supprimer" },
+                                            React.createElement(Trash2, { size: 14, color: C.danger }))))))))),
+                    React.createElement("button", { onClick: addExtraItem, className: "flex items-center gap-1.5 mt-2 text-xs", style: { color: C.teal, fontFamily: SANS } },
+                        React.createElement(Plus, { size: 13 }),
+                        " Ajouter un poste"),
+                    React.createElement("div", { className: "mt-3 pt-3", style: { borderTop: `1px solid ${C.border}` } },
+                        React.createElement("div", { className: "flex items-center justify-between text-xs mb-2" },
+                            React.createElement("span", { style: { color: C.muted, fontFamily: SANS } }, "Sous-total mat\u00E9riel & fournitures"),
+                            React.createElement("span", { style: { color: C.text, fontFamily: MONO, fontWeight: 700 } }, fmtMoney(devisMaterialTotalXOF, devisCurrency))),
+                        React.createElement("div", { className: "flex items-center justify-between gap-3 text-xs mb-2" },
+                            React.createElement("span", { style: { color: C.muted, fontFamily: SANS } }, "Main d'\u0153uvre / installation (forfait)"),
+                            React.createElement("div", { className: "w-36" },
+                                React.createElement(NumInput, { value: round2(toDisplayAmount(laborCost, devisCurrency)), onChange: (v) => setLaborCost(fromDisplayAmount(v, devisCurrency)), step: devisCurrency === "EUR" ? 0.01 : 100 }))),
+                        React.createElement("div", { className: "flex items-center justify-between pt-2", style: { borderTop: `1px dashed ${C.border}` } },
+                            React.createElement("span", { style: { color: C.text, fontFamily: SANS }, className: "text-sm font-semibold" }, "Total g\u00E9n\u00E9ral du devis"),
+                            React.createElement("span", { style: { color: C.amber, fontFamily: MONO }, className: "text-base font-bold" }, fmtMoney(devisGrandTotalXOF, devisCurrency))))))),
+            React.createElement("div", { className: "flex items-start gap-2 text-xs mt-4", style: { color: C.muted } },
+                React.createElement(Info, { size: 13, className: "mt-0.5 shrink-0" }),
+                React.createElement("p", null, "Formules standards de dimensionnement d'un syst\u00E8me photovolta\u00EFque autonome, applicables \u00E0 n'importe quel pays et n'importe quelle charge. Les valeurs par d\u00E9faut (HSP, DOD, rendement, inclinaison) sont des ordres de grandeur \u00E0 ajuster selon le site r\u00E9el, la technologie de batterie et les datasheets des \u00E9quipements.")))));
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(SolarSizer, null));
+
+</script>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
