@@ -146,6 +146,28 @@ function fmt(n, d = 0) {
         return "—";
     return n.toLocaleString("fr-FR", { maximumFractionDigits: d, minimumFractionDigits: d });
 }
+// Le franc CFA (BCEAO/BEAC) est arrimé à taux fixe à l'euro.
+const RATE_XOF_EUR = 655.957;
+function fmtMoney(xofValue, currency, forPdf) {
+    if (!isFinite(xofValue) || isNaN(xofValue))
+        xofValue = 0;
+    if (currency === "EUR") {
+        const v = xofValue / RATE_XOF_EUR;
+        return v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (forPdf ? " EUR" : " €");
+    }
+    return Math.round(xofValue).toLocaleString("fr-FR") + " FCFA";
+}
+function round2(n) {
+    if (!isFinite(n) || isNaN(n))
+        return 0;
+    return Math.round(n * 100) / 100;
+}
+function toDisplayAmount(xofValue, currency) {
+    return currency === "EUR" ? xofValue / RATE_XOF_EUR : xofValue;
+}
+function fromDisplayAmount(displayValue, currency) {
+    return currency === "EUR" ? displayValue * RATE_XOF_EUR : displayValue;
+}
 function pickStandard(list, value) {
     const f = list.find((v) => v >= value);
     return f !== undefined ? f : list[list.length - 1];
@@ -585,22 +607,62 @@ function PrintReport(p) {
                     React.createElement("td", { style: td }, "Coffrets DC / AC"),
                     React.createElement("td", { style: { ...td, fontWeight: 700 } }, "\u2014"),
                     React.createElement("td", { style: td }, "IP65 (DC) / IP54-65 (AC)")))),
+        React.createElement("div", { style: { fontSize: 12, fontWeight: 700, margin: "12px 0 6px" } }, "Devis quantitatif et estimatif (DQE)"),
+        React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", marginBottom: 6 } },
+            React.createElement("thead", null,
+                React.createElement("tr", null,
+                    React.createElement("th", { style: th }, "D\u00E9signation"),
+                    React.createElement("th", { style: { ...th, textAlign: "right" } }, "Qt\u00E9"),
+                    React.createElement("th", { style: th }, "Unit\u00E9"),
+                    React.createElement("th", { style: { ...th, textAlign: "right" } }, "Prix unitaire"),
+                    React.createElement("th", { style: { ...th, textAlign: "right" } }, "Montant"))),
+            React.createElement("tbody", null,
+                p.devisRows.map((r) => (React.createElement("tr", { key: r.id },
+                    React.createElement("td", { style: td }, r.label),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } }, fmt(r.qty, r.unit === "m" ? 1 : 0)),
+                    React.createElement("td", { style: td }, r.unit),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } }, fmtMoney(r.priceXOF, p.devisCurrency)),
+                    React.createElement("td", { style: { ...td, textAlign: "right", fontWeight: 700 } }, fmtMoney(r.totalXOF, p.devisCurrency))))),
+                p.extraRowsComputed.map((it) => (React.createElement("tr", { key: it.id },
+                    React.createElement("td", { style: td }, it.name),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } }, fmt(it.qty)),
+                    React.createElement("td", { style: td }, it.unit),
+                    React.createElement("td", { style: { ...td, textAlign: "right" } }, fmtMoney(it.price, p.devisCurrency)),
+                    React.createElement("td", { style: { ...td, textAlign: "right", fontWeight: 700 } }, fmtMoney(it.totalXOF, p.devisCurrency))))),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } }, "Sous-total mat\u00E9riel & fournitures"),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: { ...td, fontWeight: 700, textAlign: "right" } }, fmtMoney(p.devisMaterialTotalXOF, p.devisCurrency))),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: { ...td, fontWeight: 700 } }, "Main d'\u0153uvre / installation (forfait)"),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: td }),
+                    React.createElement("td", { style: { ...td, fontWeight: 700, textAlign: "right" } }, fmtMoney(p.laborCost, p.devisCurrency))),
+                React.createElement("tr", null,
+                    React.createElement("td", { style: { ...td, fontWeight: 700, fontSize: 13, borderBottom: "2px solid #111" } }, "Total g\u00E9n\u00E9ral du devis"),
+                    React.createElement("td", { style: { ...td, borderBottom: "2px solid #111" } }),
+                    React.createElement("td", { style: { ...td, borderBottom: "2px solid #111" } }),
+                    React.createElement("td", { style: { ...td, borderBottom: "2px solid #111" } }),
+                    React.createElement("td", { style: { ...td, fontWeight: 700, fontSize: 13, textAlign: "right", borderBottom: "2px solid #111" } }, fmtMoney(p.devisGrandTotalXOF, p.devisCurrency))))),
         React.createElement("p", { style: { fontSize: 9, color: "#777", marginTop: 16 } },
             "Document g\u00E9n\u00E9r\u00E9 par ",
             p.brand,
-            ". Formules standards de dimensionnement PV autonome ; valeurs \u00E0 confirmer sur site avant installation.")));
+            ". Formules standards de dimensionnement PV autonome ; valeurs \u00E0 confirmer sur site avant installation. Devis estimatif, hors impr\u00E9vus et frais annexes (transport, douane, etc.) sauf mention contraire.")));
 }
 function SolarSizer() {
     // Marque & accès (vendeur)
-    const [brand, setBrand] = React.useState("Solaire Lithium Pro");
-    const [paywallEnabled, setPaywallEnabled] = React.useState(false);
-    const [accessCode, setAccessCode] = React.useState("SOLAIRE2026");
-    const [purchaseLink, setPurchaseLink] = React.useState("https://snfjagmk.mychariow.com");
-    const [enteredCode, setEnteredCode] = React.useState("");
+    const [brand, setBrand] = (0, React.useState)("Solaire Lithium Pro");
+    const [paywallEnabled, setPaywallEnabled] = (0, React.useState)(false);
+    const [accessCode, setAccessCode] = (0, React.useState)("SOLAIRE2026");
+    const [purchaseLink, setPurchaseLink] = (0, React.useState)("https://snfjagmk.mychariow.com");
+    const [enteredCode, setEnteredCode] = (0, React.useState)("");
     const unlocked = !paywallEnabled || enteredCode.trim().toUpperCase() === accessCode.trim().toUpperCase();
-    const [logo, setLogo] = React.useState(null);
-    const [clientName, setClientName] = React.useState("");
-    const [projectAddress, setProjectAddress] = React.useState("");
+    const [logo, setLogo] = (0, React.useState)(null);
+    const [clientName, setClientName] = (0, React.useState)("");
+    const [projectAddress, setProjectAddress] = (0, React.useState)("");
     const dateStr = new Date().toLocaleDateString("fr-FR");
     const handleLogoUpload = (e) => {
         const file = e.target.files && e.target.files[0];
@@ -610,8 +672,8 @@ function SolarSizer() {
         reader.onload = () => setLogo(reader.result);
         reader.readAsDataURL(file);
     };
-    const [pdfLoading, setPdfLoading] = React.useState(false);
-    const [pdfError, setPdfError] = React.useState("");
+    const [pdfLoading, setPdfLoading] = (0, React.useState)(false);
+    const [pdfError, setPdfError] = (0, React.useState)("");
     const handleDownloadPdf = () => {
         setPdfError("");
         setPdfLoading(true);
@@ -697,6 +759,36 @@ function SolarSizer() {
                 doc.row([{ x: c1 + 10, text: r[1], color: [0.75, 0.55, 0.1] }, { x: c1 + 150, text: r[2], size: 8.5, color: [0.1, 0.55, 0.45] }]);
             });
             doc.space(12);
+            // Devis quantitatif et estimatif
+            doc.text(M, "Devis quantitatif et estimatif (DQE)", { size: 12, bold: true, lh: 16 });
+            const dc1 = M, dc2 = M + 220, dc3 = M + 265, dc4 = M + 330, dc5 = M + 420;
+            doc.row([
+                { x: dc1, text: "Designation", bold: true }, { x: dc2, text: "Qte", bold: true },
+                { x: dc3, text: "Unite", bold: true }, { x: dc4, text: "P.U.", bold: true }, { x: dc5, text: "Montant", bold: true },
+            ]);
+            doc.hr();
+            devisRows.forEach((r) => {
+                doc.row([
+                    { x: dc1, text: r.label }, { x: dc2, text: fmt(r.qty, r.unit === "m" ? 1 : 0) },
+                    { x: dc3, text: r.unit }, { x: dc4, text: fmtMoney(r.priceXOF, devisCurrency, true) },
+                    { x: dc5, text: fmtMoney(r.totalXOF, devisCurrency, true) },
+                ]);
+            });
+            extraRowsComputed.forEach((it) => {
+                doc.row([
+                    { x: dc1, text: it.name }, { x: dc2, text: fmt(it.qty) },
+                    { x: dc3, text: it.unit }, { x: dc4, text: fmtMoney(it.price, devisCurrency, true) },
+                    { x: dc5, text: fmtMoney(it.totalXOF, devisCurrency, true) },
+                ]);
+            });
+            doc.hr();
+            doc.row([{ x: dc1, text: "Sous-total materiel & fournitures", bold: true }, { x: dc5, text: fmtMoney(devisMaterialTotalXOF, devisCurrency, true), bold: true }]);
+            doc.row([{ x: dc1, text: "Main d'oeuvre / installation (forfait)", bold: true }, { x: dc5, text: fmtMoney(laborCost, devisCurrency, true), bold: true }]);
+            doc.hr();
+            doc.row([{ x: dc1, text: "TOTAL GENERAL DU DEVIS", bold: true, size: 11 }, { x: dc5, text: fmtMoney(devisGrandTotalXOF, devisCurrency, true), bold: true, size: 11 }]);
+            doc.space(10);
+            doc.text(M, "Devis estimatif, hors imprevus et frais annexes (transport, douane, etc.) sauf mention contraire.", { size: 7.5, color: [0.5, 0.5, 0.5] });
+            doc.space(6);
             doc.hr();
             doc.text(M, `Document genere par ${brand || "Dimensionnement solaire"}. Formules standards de dimensionnement PV autonome ; valeurs a confirmer sur site avant installation.`, { size: 7.5, color: [0.5, 0.5, 0.5] });
             const bytes = doc.build();
@@ -719,40 +811,58 @@ function SolarSizer() {
         }
     };
     // Charges
-    const [loads, setLoads] = React.useState([
+    const [loads, setLoads] = (0, React.useState)([
         { id: 1, name: "Ampoule LED", power: 10, qty: 4, hours: 5 },
         { id: 2, name: "Réfrigérateur", power: 150, qty: 1, hours: 8 },
         { id: 3, name: "Télévision", power: 80, qty: 1, hours: 4 },
         { id: 4, name: "Ordinateur portable", power: 65, qty: 1, hours: 3 },
     ]);
-    const [nextId, setNextId] = React.useState(5);
+    const [nextId, setNextId] = (0, React.useState)(5);
     // Localisation & irradiation
-    const [continent, setContinent] = React.useState("Afrique");
-    const [country, setCountry] = React.useState("Bénin");
-    const [hsp, setHsp] = React.useState(5.0);
-    const [latitude, setLatitude] = React.useState(6.4);
-    const [tiltCorrection, setTiltCorrection] = React.useState(100);
+    const [continent, setContinent] = (0, React.useState)("Afrique");
+    const [country, setCountry] = (0, React.useState)("Bénin");
+    const [hsp, setHsp] = (0, React.useState)(5.0);
+    const [latitude, setLatitude] = (0, React.useState)(6.4);
+    const [tiltCorrection, setTiltCorrection] = (0, React.useState)(100);
     // Système
-    const [systemVoltage, setSystemVoltage] = React.useState(24);
-    const [autonomyDays, setAutonomyDays] = React.useState(2);
-    const [dod, setDod] = React.useState(50);
-    const [efficiency, setEfficiency] = React.useState(80);
-    const [safetyFactor, setSafetyFactor] = React.useState(1.3);
-    const [panelWp, setPanelWp] = React.useState(300);
-    const [panelVoltage, setPanelVoltage] = React.useState(12);
-    const [batteryAh, setBatteryAh] = React.useState(200);
-    const [batteryVoltage, setBatteryVoltage] = React.useState(12);
-    const [inverterMargin, setInverterMargin] = React.useState(1.25);
-    const [regMargin, setRegMargin] = React.useState(1.25);
-    const [distPV, setDistPV] = React.useState(10);
-    const [distBatt, setDistBatt] = React.useState(2);
-    const [dropPct, setDropPct] = React.useState(3);
+    const [systemVoltage, setSystemVoltage] = (0, React.useState)(24);
+    const [autonomyDays, setAutonomyDays] = (0, React.useState)(2);
+    const [dod, setDod] = (0, React.useState)(50);
+    const [efficiency, setEfficiency] = (0, React.useState)(80);
+    const [safetyFactor, setSafetyFactor] = (0, React.useState)(1.3);
+    const [panelWp, setPanelWp] = (0, React.useState)(300);
+    const [panelVoltage, setPanelVoltage] = (0, React.useState)(12);
+    const [batteryAh, setBatteryAh] = (0, React.useState)(200);
+    const [batteryVoltage, setBatteryVoltage] = (0, React.useState)(12);
+    const [inverterMargin, setInverterMargin] = (0, React.useState)(1.25);
+    const [regMargin, setRegMargin] = (0, React.useState)(1.25);
+    const [distPV, setDistPV] = (0, React.useState)(10);
+    const [distBatt, setDistBatt] = (0, React.useState)(2);
+    const [dropPct, setDropPct] = (0, React.useState)(3);
     // Protections
-    const [panelIsc, setPanelIsc] = React.useState(9.5);
-    const [panelVoc, setPanelVoc] = React.useState(22);
-    const [vocColdFactor, setVocColdFactor] = React.useState(1.15);
-    const [acPhase, setAcPhase] = React.useState("mono");
-    const [highLightningRisk, setHighLightningRisk] = React.useState(false);
+    const [panelIsc, setPanelIsc] = (0, React.useState)(9.5);
+    const [panelVoc, setPanelVoc] = (0, React.useState)(22);
+    const [vocColdFactor, setVocColdFactor] = (0, React.useState)(1.15);
+    const [acPhase, setAcPhase] = (0, React.useState)("mono");
+    const [highLightningRisk, setHighLightningRisk] = (0, React.useState)(false);
+    // Devis quantitatif et estimatif (DQE)
+    const [devisCurrency, setDevisCurrency] = (0, React.useState)("XOF");
+    const [devisPrices, setDevisPrices] = (0, React.useState)({
+        panels: 60000, batteries: 75000, regulator: 20000, inverter: 150000,
+        cablePV: 1200, cableBatt: 1500, stringFuse: 3000, mainDC: 15000,
+        chargeBreaker: 12000, dischargeBreaker: 12000, spdDC: 20000,
+        acBreaker: 12000, acSwitch: 15000, spdAC: 15000, earthing: 25000, coffrets: 20000,
+    });
+    const updateDevisPrice = (id, displayVal) => setDevisPrices((p) => ({ ...p, [id]: fromDisplayAmount(displayVal, devisCurrency) }));
+    const [laborCost, setLaborCost] = (0, React.useState)(100000);
+    const [extraItems, setExtraItems] = (0, React.useState)([]);
+    const [nextExtraId, setNextExtraId] = (0, React.useState)(1);
+    const addExtraItem = () => {
+        setExtraItems((its) => [...its, { id: nextExtraId, name: "Autre poste", qty: 1, unit: "u", price: 0 }]);
+        setNextExtraId((n) => n + 1);
+    };
+    const updateExtraItem = (id, key, val) => setExtraItems((its) => its.map((it) => (it.id === id ? { ...it, [key]: val } : it)));
+    const removeExtraItem = (id) => setExtraItems((its) => its.filter((it) => it.id !== id));
     const countryOptions = REGIONS[continent].map((c) => c[0]);
     const onContinentChange = (val) => {
         setContinent(val);
@@ -771,7 +881,7 @@ function SolarSizer() {
     const removeLoad = (id) => setLoads((ls) => ls.filter((l) => l.id !== id));
     const recommendedTilt = Math.round(Math.abs(latitude));
     const orientation = latitude >= 0 ? "Sud" : "Nord";
-    const calc = React.useMemo(() => {
+    const calc = (0, React.useMemo)(() => {
         const dailyEnergyWh = loads.reduce((s, l) => s + l.power * l.qty * l.hours, 0);
         const maxInstantW = loads.reduce((s, l) => s + l.power * l.qty, 0);
         const correctedEnergyWh = dailyEnergyWh / (efficiency / 100 || 1);
@@ -826,6 +936,35 @@ function SolarSizer() {
             earthSectionCalc, earthSectionStd, spdType,
         };
     }, [loads, systemVoltage, autonomyDays, dod, efficiency, hsp, tiltCorrection, safetyFactor, panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin, distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk]);
+    const devisRows = (0, React.useMemo)(() => {
+        const rows = [
+            { id: "panels", label: `Panneau solaire ${panelWp} Wc`, qty: calc.totalPanels, unit: "u" },
+            { id: "batteries", label: `Batterie ${batteryAh} Ah / ${batteryVoltage} V`, qty: calc.totalBatteries, unit: "u" },
+            { id: "regulator", label: `Régulateur de charge ${calc.regulator} A`, qty: 1, unit: "u" },
+            { id: "inverter", label: `Onduleur ${fmt(calc.inverterVA)} VA`, qty: 1, unit: "u" },
+            { id: "cablePV", label: `Câble PV → régulateur (${calc.sectionPV} mm²)`, qty: distPV * 2, unit: "m" },
+            { id: "cableBatt", label: `Câble batterie → onduleur (${calc.sectionBatt} mm²)`, qty: distBatt * 2, unit: "m" },
+            { id: "stringFuse", label: `Fusible gPV ${calc.stringFuseStd} A`, qty: calc.panelsParallel > 1 ? calc.panelsParallel : 0, unit: "u" },
+            { id: "mainDC", label: `Sectionneur/disjoncteur DC général ${calc.mainDCStd} A`, qty: 1, unit: "u" },
+            { id: "chargeBreaker", label: `Disjoncteur DC charge ${calc.chargeBreakerStd} A`, qty: 1, unit: "u" },
+            { id: "dischargeBreaker", label: `Disjoncteur/sectionneur DC décharge ${calc.dischargeBreakerStd} A`, qty: 1, unit: "u" },
+            { id: "spdDC", label: `Parafoudre DC ${calc.spdType}`, qty: 1, unit: "u" },
+            { id: "acBreaker", label: `Disjoncteur AC ${calc.acBreakerStd} A`, qty: 1, unit: "u" },
+            { id: "acSwitch", label: `Interrupteur-sectionneur AC général ${calc.acBreakerStd} A`, qty: 1, unit: "u" },
+            { id: "spdAC", label: `Parafoudre AC ${calc.spdType}`, qty: 1, unit: "u" },
+            { id: "earthing", label: `Mise à la terre (${calc.earthSectionStd} mm²)`, qty: 1, unit: "forfait" },
+            { id: "coffrets", label: "Coffrets DC / AC", qty: 2, unit: "u" },
+        ];
+        return rows
+            .filter((r) => r.qty > 0)
+            .map((r) => {
+            const priceXOF = devisPrices[r.id] || 0;
+            return { ...r, priceXOF, totalXOF: r.qty * priceXOF };
+        });
+    }, [calc, devisPrices, distPV, distBatt, panelWp, batteryAh, batteryVoltage]);
+    const extraRowsComputed = extraItems.map((it) => ({ ...it, totalXOF: it.qty * it.price }));
+    const devisMaterialTotalXOF = devisRows.reduce((s, r) => s + r.totalXOF, 0) + extraRowsComputed.reduce((s, r) => s + r.totalXOF, 0);
+    const devisGrandTotalXOF = devisMaterialTotalXOF + laborCost;
     // Sauvegarde locale (persistance entre les ouvertures de l'app sur le téléphone)
     const STORAGE_KEY = "solar-sizer-data-v2";
     const didLoad = React.useRef(false);
@@ -834,86 +973,58 @@ function SolarSizer() {
             const raw = localStorage.getItem(STORAGE_KEY);
             if (raw) {
                 const s = JSON.parse(raw);
-                if (s.brand !== undefined)
-                    setBrand(s.brand);
-                if (s.purchaseLink !== undefined)
-                    setPurchaseLink(s.purchaseLink);
-                if (s.logo !== undefined)
-                    setLogo(s.logo);
-                if (s.clientName !== undefined)
-                    setClientName(s.clientName);
-                if (s.projectAddress !== undefined)
-                    setProjectAddress(s.projectAddress);
-                if (s.paywallEnabled !== undefined)
-                    setPaywallEnabled(s.paywallEnabled);
-                if (s.accessCode !== undefined)
-                    setAccessCode(s.accessCode);
-                if (s.loads !== undefined)
-                    setLoads(s.loads);
-                if (s.nextId !== undefined)
-                    setNextId(s.nextId);
-                if (s.continent !== undefined)
-                    setContinent(s.continent);
-                if (s.country !== undefined)
-                    setCountry(s.country);
-                if (s.hsp !== undefined)
-                    setHsp(s.hsp);
-                if (s.latitude !== undefined)
-                    setLatitude(s.latitude);
-                if (s.tiltCorrection !== undefined)
-                    setTiltCorrection(s.tiltCorrection);
-                if (s.systemVoltage !== undefined)
-                    setSystemVoltage(s.systemVoltage);
-                if (s.autonomyDays !== undefined)
-                    setAutonomyDays(s.autonomyDays);
-                if (s.dod !== undefined)
-                    setDod(s.dod);
-                if (s.efficiency !== undefined)
-                    setEfficiency(s.efficiency);
-                if (s.safetyFactor !== undefined)
-                    setSafetyFactor(s.safetyFactor);
-                if (s.panelWp !== undefined)
-                    setPanelWp(s.panelWp);
-                if (s.panelVoltage !== undefined)
-                    setPanelVoltage(s.panelVoltage);
-                if (s.batteryAh !== undefined)
-                    setBatteryAh(s.batteryAh);
-                if (s.batteryVoltage !== undefined)
-                    setBatteryVoltage(s.batteryVoltage);
-                if (s.inverterMargin !== undefined)
-                    setInverterMargin(s.inverterMargin);
-                if (s.regMargin !== undefined)
-                    setRegMargin(s.regMargin);
-                if (s.distPV !== undefined)
-                    setDistPV(s.distPV);
-                if (s.distBatt !== undefined)
-                    setDistBatt(s.distBatt);
-                if (s.dropPct !== undefined)
-                    setDropPct(s.dropPct);
-                if (s.panelIsc !== undefined)
-                    setPanelIsc(s.panelIsc);
-                if (s.panelVoc !== undefined)
-                    setPanelVoc(s.panelVoc);
-                if (s.vocColdFactor !== undefined)
-                    setVocColdFactor(s.vocColdFactor);
-                if (s.acPhase !== undefined)
-                    setAcPhase(s.acPhase);
-                if (s.highLightningRisk !== undefined)
-                    setHighLightningRisk(s.highLightningRisk);
+                if (s.brand !== undefined) setBrand(s.brand);
+                if (s.purchaseLink !== undefined) setPurchaseLink(s.purchaseLink);
+                if (s.logo !== undefined) setLogo(s.logo);
+                if (s.clientName !== undefined) setClientName(s.clientName);
+                if (s.projectAddress !== undefined) setProjectAddress(s.projectAddress);
+                if (s.paywallEnabled !== undefined) setPaywallEnabled(s.paywallEnabled);
+                if (s.accessCode !== undefined) setAccessCode(s.accessCode);
+                if (s.loads !== undefined) setLoads(s.loads);
+                if (s.nextId !== undefined) setNextId(s.nextId);
+                if (s.continent !== undefined) setContinent(s.continent);
+                if (s.country !== undefined) setCountry(s.country);
+                if (s.hsp !== undefined) setHsp(s.hsp);
+                if (s.latitude !== undefined) setLatitude(s.latitude);
+                if (s.tiltCorrection !== undefined) setTiltCorrection(s.tiltCorrection);
+                if (s.systemVoltage !== undefined) setSystemVoltage(s.systemVoltage);
+                if (s.autonomyDays !== undefined) setAutonomyDays(s.autonomyDays);
+                if (s.dod !== undefined) setDod(s.dod);
+                if (s.efficiency !== undefined) setEfficiency(s.efficiency);
+                if (s.safetyFactor !== undefined) setSafetyFactor(s.safetyFactor);
+                if (s.panelWp !== undefined) setPanelWp(s.panelWp);
+                if (s.panelVoltage !== undefined) setPanelVoltage(s.panelVoltage);
+                if (s.batteryAh !== undefined) setBatteryAh(s.batteryAh);
+                if (s.batteryVoltage !== undefined) setBatteryVoltage(s.batteryVoltage);
+                if (s.inverterMargin !== undefined) setInverterMargin(s.inverterMargin);
+                if (s.regMargin !== undefined) setRegMargin(s.regMargin);
+                if (s.distPV !== undefined) setDistPV(s.distPV);
+                if (s.distBatt !== undefined) setDistBatt(s.distBatt);
+                if (s.dropPct !== undefined) setDropPct(s.dropPct);
+                if (s.panelIsc !== undefined) setPanelIsc(s.panelIsc);
+                if (s.panelVoc !== undefined) setPanelVoc(s.panelVoc);
+                if (s.vocColdFactor !== undefined) setVocColdFactor(s.vocColdFactor);
+                if (s.acPhase !== undefined) setAcPhase(s.acPhase);
+                if (s.highLightningRisk !== undefined) setHighLightningRisk(s.highLightningRisk);
+                if (s.devisCurrency !== undefined) setDevisCurrency(s.devisCurrency);
+                if (s.devisPrices !== undefined) setDevisPrices(s.devisPrices);
+                if (s.laborCost !== undefined) setLaborCost(s.laborCost);
+                if (s.extraItems !== undefined) setExtraItems(s.extraItems);
+                if (s.nextExtraId !== undefined) setNextExtraId(s.nextExtraId);
             }
         }
         catch (e) { /* ignore corrupted storage */ }
         didLoad.current = true;
     }, []);
     React.useEffect(() => {
-        if (!didLoad.current)
-            return;
+        if (!didLoad.current) return;
         const snapshot = {
             brand, purchaseLink, logo, clientName, projectAddress, paywallEnabled, accessCode,
             loads, nextId, continent, country, hsp, latitude, tiltCorrection,
             systemVoltage, autonomyDays, dod, efficiency, safetyFactor,
             panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin,
             distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk,
+            devisCurrency, devisPrices, laborCost, extraItems, nextExtraId,
         };
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -923,12 +1034,14 @@ function SolarSizer() {
         loads, nextId, continent, country, hsp, latitude, tiltCorrection,
         systemVoltage, autonomyDays, dod, efficiency, safetyFactor,
         panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin,
-        distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk]);
+        distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk,
+        devisCurrency, devisPrices, laborCost, extraItems, nextExtraId]);
     const printProps = {
         brand, logo, clientName, projectAddress, dateStr, loads, calc, country, continent,
         hsp, tiltCorrection, latitude, recommendedTilt, orientation,
         systemVoltage, autonomyDays, dod, efficiency, panelWp, panelVoltage, batteryAh, batteryVoltage,
         panelIsc, panelVoc, acPhase, highLightningRisk,
+        devisRows, extraRowsComputed, laborCost, devisMaterialTotalXOF, devisGrandTotalXOF, devisCurrency,
     };
     return (React.createElement("div", { style: { background: C.bg, minHeight: "100%", fontFamily: SANS }, className: "w-full p-4 sm:p-6" },
         React.createElement("style", null, `
@@ -1184,11 +1297,63 @@ function SolarSizer() {
                     React.createElement(ProtectionRow, { label: "Interrupteur-sectionneur g\u00E9n\u00E9ral AC", formula: "I \u2265 Idisjoncteur AC", sub: `≥ ${calc.acBreakerStd} A`, result: calc.acBreakerStd, unit: "A", note: "Sectionneur visible et cadenassable, bipolaire (mono) ou t\u00E9trapolaire (triphas\u00E9), pouvoir de coupure en charge \u2014 coupure g\u00E9n\u00E9rale avant intervention." }),
                     React.createElement(ProtectionRow, { label: "Parafoudre AC (avant les charges)", formula: "Uc \u2265 1.1 \u00D7 Un", sub: `≥ 1.1 × ${calc.acLineVoltage} V`, result: `${calc.spdType}`, unit: "", note: "Parafoudre AC en t\u00EAte d'installation, associ\u00E9 \u00E0 la mise \u00E0 la terre \u2014 prot\u00E8ge l'onduleur et les charges sensibles." }),
                     React.createElement(ProtectionRow, { label: "Mise \u00E0 la terre", formula: "S(terre) : = S(actif) si \u226416mm\u00B2 \u00B7 =16mm\u00B2 si 16\u201335mm\u00B2 \u00B7 =S(actif)/2 si >35mm\u00B2", sub: `Section active de référence = ${Math.max(calc.sectionPV, calc.sectionBatt)} mm²`, result: `${calc.earthSectionStd} mm² · résistance de terre visée ≤ 10 Ω`, unit: "", note: "Piquet(s) de terre ou boucle \u00E0 fond de fouille, conducteur cuivre (nu ou vert-jaune prot\u00E9g\u00E9), liaison \u00E9quipotentielle des masses m\u00E9talliques (ch\u00E2ssis panneaux, coffrets DC/AC, chemin de c\u00E2bles)." }),
-                    React.createElement(ProtectionRow, { label: "Coffrets de protection DC & AC", note: "Coffret DC : IP65 mini, fusibles/disjoncteurs DC + parafoudre DC + bornes de raccordement des cha\u00EEnes. Coffret AC : IP54/65, disjoncteur diff\u00E9rentiel + parafoudre AC + sectionneur g\u00E9n\u00E9ral \u2014 tous deux en amont/aval de l'onduleur, accessibles et rep\u00E9r\u00E9s." })))),
+                    React.createElement(ProtectionRow, { label: "Coffrets de protection DC & AC", note: "Coffret DC : IP65 mini, fusibles/disjoncteurs DC + parafoudre DC + bornes de raccordement des cha\u00EEnes. Coffret AC : IP54/65, disjoncteur diff\u00E9rentiel + parafoudre AC + sectionneur g\u00E9n\u00E9ral \u2014 tous deux en amont/aval de l'onduleur, accessibles et rep\u00E9r\u00E9s." })),
+                React.createElement(Section, { n: "07", title: "Devis quantitatif et estimatif (DQE)", subtitle: "Quantit\u00E9s calcul\u00E9es automatiquement \u00E0 partir du dimensionnement. Prix par d\u00E9faut modifiables.", accent: C.amber },
+                    React.createElement("div", { className: "flex items-center justify-between mb-3 gap-3 flex-wrap" },
+                        React.createElement("span", { style: { color: C.muted, fontFamily: SANS }, className: "text-xs" }, "Prix unitaires \u00E9ditables ci-dessous."),
+                        React.createElement("div", { className: "w-36" },
+                            React.createElement(Select, { value: devisCurrency, onChange: setDevisCurrency, options: ["XOF", "EUR"], labels: ["Franc CFA (XOF)", "Euro (EUR)"] }))),
+                    React.createElement("div", { className: "overflow-x-auto -mx-1" },
+                        React.createElement("table", { className: "w-full text-xs", style: { borderCollapse: "collapse" } },
+                            React.createElement("thead", null,
+                                React.createElement("tr", { style: { color: C.muted, fontFamily: SANS }, className: "text-[10px] uppercase tracking-wider" },
+                                    React.createElement("th", { className: "text-left py-1.5 px-1" }, "D\u00E9signation"),
+                                    React.createElement("th", { className: "text-right py-1.5 px-1" }, "Qt\u00E9"),
+                                    React.createElement("th", { className: "text-left py-1.5 px-1" }, "Unit\u00E9"),
+                                    React.createElement("th", { className: "text-right py-1.5 px-1" }, "Prix unitaire"),
+                                    React.createElement("th", { className: "text-right py-1.5 px-1" }, "Montant"),
+                                    React.createElement("th", null))),
+                            React.createElement("tbody", null,
+                                devisRows.map((r) => (React.createElement("tr", { key: r.id, style: { borderTop: `1px dashed ${C.border}` } },
+                                    React.createElement("td", { className: "py-1.5 px-1", style: { color: C.text, fontFamily: SANS } }, r.label),
+                                    React.createElement("td", { className: "py-1.5 px-1 text-right", style: { color: C.text, fontFamily: MONO } }, fmt(r.qty, r.unit === "m" ? 1 : 0)),
+                                    React.createElement("td", { className: "py-1.5 px-1", style: { color: C.muted, fontFamily: MONO } }, r.unit),
+                                    React.createElement("td", { className: "py-1.5 px-1", style: { minWidth: 120 } },
+                                        React.createElement(NumInput, { value: round2(toDisplayAmount(r.priceXOF, devisCurrency)), onChange: (v) => updateDevisPrice(r.id, v), step: devisCurrency === "EUR" ? 0.01 : 100 })),
+                                    React.createElement("td", { className: "py-1.5 px-1 text-right whitespace-nowrap", style: { color: C.amber, fontFamily: MONO, fontWeight: 700 } }, fmtMoney(r.totalXOF, devisCurrency)),
+                                    React.createElement("td", null)))),
+                                extraRowsComputed.map((it) => (React.createElement("tr", { key: it.id, style: { borderTop: `1px dashed ${C.border}` } },
+                                    React.createElement("td", { className: "py-1.5 px-1" },
+                                        React.createElement(TextInput, { value: it.name, onChange: (v) => updateExtraItem(it.id, "name", v) })),
+                                    React.createElement("td", { className: "py-1.5 px-1", style: { minWidth: 60 } },
+                                        React.createElement(NumInput, { value: it.qty, onChange: (v) => updateExtraItem(it.id, "qty", v) })),
+                                    React.createElement("td", { className: "py-1.5 px-1", style: { minWidth: 70 } },
+                                        React.createElement(TextInput, { value: it.unit, onChange: (v) => updateExtraItem(it.id, "unit", v) })),
+                                    React.createElement("td", { className: "py-1.5 px-1", style: { minWidth: 120 } },
+                                        React.createElement(NumInput, { value: round2(toDisplayAmount(it.price, devisCurrency)), onChange: (v) => updateExtraItem(it.id, "price", fromDisplayAmount(v, devisCurrency)), step: devisCurrency === "EUR" ? 0.01 : 100 })),
+                                    React.createElement("td", { className: "py-1.5 px-1 text-right whitespace-nowrap", style: { color: C.amber, fontFamily: MONO, fontWeight: 700 } }, fmtMoney(it.totalXOF, devisCurrency)),
+                                    React.createElement("td", { className: "py-1.5 px-1 text-right" },
+                                        React.createElement("button", { onClick: () => removeExtraItem(it.id), "aria-label": "Supprimer" },
+                                            React.createElement(Trash2, { size: 14, color: C.danger }))))))))),
+                    React.createElement("button", { onClick: addExtraItem, className: "flex items-center gap-1.5 mt-2 text-xs", style: { color: C.teal, fontFamily: SANS } },
+                        React.createElement(Plus, { size: 13 }),
+                        " Ajouter un poste"),
+                    React.createElement("div", { className: "mt-3 pt-3", style: { borderTop: `1px solid ${C.border}` } },
+                        React.createElement("div", { className: "flex items-center justify-between text-xs mb-2" },
+                            React.createElement("span", { style: { color: C.muted, fontFamily: SANS } }, "Sous-total mat\u00E9riel & fournitures"),
+                            React.createElement("span", { style: { color: C.text, fontFamily: MONO, fontWeight: 700 } }, fmtMoney(devisMaterialTotalXOF, devisCurrency))),
+                        React.createElement("div", { className: "flex items-center justify-between gap-3 text-xs mb-2" },
+                            React.createElement("span", { style: { color: C.muted, fontFamily: SANS } }, "Main d'\u0153uvre / installation (forfait)"),
+                            React.createElement("div", { className: "w-36" },
+                                React.createElement(NumInput, { value: round2(toDisplayAmount(laborCost, devisCurrency)), onChange: (v) => setLaborCost(fromDisplayAmount(v, devisCurrency)), step: devisCurrency === "EUR" ? 0.01 : 100 }))),
+                        React.createElement("div", { className: "flex items-center justify-between pt-2", style: { borderTop: `1px dashed ${C.border}` } },
+                            React.createElement("span", { style: { color: C.text, fontFamily: SANS }, className: "text-sm font-semibold" }, "Total g\u00E9n\u00E9ral du devis"),
+                            React.createElement("span", { style: { color: C.amber, fontFamily: MONO }, className: "text-base font-bold" }, fmtMoney(devisGrandTotalXOF, devisCurrency))))))),
             React.createElement("div", { className: "flex items-start gap-2 text-xs mt-4", style: { color: C.muted } },
                 React.createElement(Info, { size: 13, className: "mt-0.5 shrink-0" }),
                 React.createElement("p", null, "Formules standards de dimensionnement d'un syst\u00E8me photovolta\u00EFque autonome, applicables \u00E0 n'importe quel pays et n'importe quelle charge. Les valeurs par d\u00E9faut (HSP, DOD, rendement, inclinaison) sont des ordres de grandeur \u00E0 ajuster selon le site r\u00E9el, la technologie de batterie et les datasheets des \u00E9quipements.")))));
 }
+
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(SolarSizer, null));
 
 </script>
