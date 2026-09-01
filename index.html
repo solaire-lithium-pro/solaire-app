@@ -829,6 +829,55 @@ function SolarSizer() {
     const [pumpEfficiency, setPumpEfficiency] = (0, React.useState)(55);
     const [pumpDriveEfficiency, setPumpDriveEfficiency] = (0, React.useState)(92);
     const [pumpSystemType, setPumpSystemType] = (0, React.useState)("filSoleil");
+    // Climatisation / Froid
+    const STD_BTU = [9000, 12000, 18000, 24000, 30000, 36000, 48000, 60000];
+    const BTU_TO_CV = { 9000: "1 CV", 12000: "1.5 CV", 18000: "2 CV", 24000: "2.5 CV", 30000: "3 CV", 36000: "4 CV", 48000: "4 CV", 60000: "5 CV" };
+    const [acRooms, setAcRooms] = (0, React.useState)([
+        { id: 1, name: "Salon", mode: "rapide", surface: 20, height: 2.5, insulation: "moyenne", sun: "normale", occupants: 2, appliancesW: 0, pipeLength: 3, price: 250000 },
+    ]);
+    const [nextAcId, setNextAcId] = (0, React.useState)(2);
+    const updateAcRoom = (id, key, val) => setAcRooms((rs) => rs.map((r) => (r.id === id ? { ...r, [key]: val } : r)));
+    const addAcRoom = () => { setAcRooms((rs) => [...rs, { id: nextAcId, name: "Nouvelle pièce", mode: "rapide", surface: 15, height: 2.5, insulation: "moyenne", sun: "normale", occupants: 2, appliancesW: 0, pipeLength: 3, price: 200000 }]); setNextAcId((n) => n + 1); };
+    const removeAcRoom = (id) => setAcRooms((rs) => rs.filter((r) => r.id !== id));
+    function computeRoomBtu(r) {
+        let btu;
+        if (r.mode === "rapide") {
+            btu = r.surface * 600;
+        }
+        else {
+            const insulationFactor = { bonne: 0.85, moyenne: 1.0, mauvaise: 1.15 }[r.insulation] || 1;
+            const sunFactor = { ombragee: 0.9, normale: 1.0, exposee: 1.15 }[r.sun] || 1;
+            const base = r.surface * (r.height / 2.5) * 600 * insulationFactor * sunFactor;
+            const occupantsExtra = Math.max(0, r.occupants - 2) * 600;
+            const appliancesBtu = r.appliancesW * 3.412;
+            btu = base + occupantsExtra + appliancesBtu;
+        }
+        const stdBtu = STD_BTU.find((v) => v >= btu) || STD_BTU[STD_BTU.length - 1];
+        return { btu, stdBtu, cv: BTU_TO_CV[stdBtu] || "" };
+    }
+    // Caméras de surveillance
+    const [cameras, setCameras] = (0, React.useState)([
+        { id: 1, name: "Entrée principale", type: "exterieure", qty: 2, price: 35000 },
+        { id: 2, name: "Salon / bureau", type: "interieure", qty: 1, price: 25000 },
+    ]);
+    const [nextCamId, setNextCamId] = (0, React.useState)(3);
+    const [recordingDays, setRecordingDays] = (0, React.useState)(15);
+    const [bitrateMbps, setBitrateMbps] = (0, React.useState)(4);
+    const [camCableLength, setCamCableLength] = (0, React.useState)(30);
+    const [camIsIP, setCamIsIP] = (0, React.useState)(true);
+    const updateCamera = (id, key, val) => setCameras((cs) => cs.map((c) => (c.id === id ? { ...c, [key]: val } : c)));
+    const addCamera = () => { setCameras((cs) => [...cs, { id: nextCamId, name: "Nouvelle caméra", type: "exterieure", qty: 1, price: 35000 }]); setNextCamId((n) => n + 1); };
+    const removeCamera = (id) => setCameras((cs) => cs.filter((c) => c.id !== id));
+    const camCalc = (0, React.useMemo)(() => {
+        const totalCameras = cameras.reduce((s, c) => s + c.qty, 0);
+        const storageGB = (totalCameras * bitrateMbps * 3600 * 24 * recordingDays) / (8 * 1024);
+        const storageTB = storageGB / 1024;
+        const STD_DISK = [1, 2, 4, 6, 8, 10, 12, 14, 16];
+        const recommendedDiskTB = STD_DISK.find((v) => v >= storageTB) || STD_DISK[STD_DISK.length - 1];
+        const STD_NVR = [4, 8, 16, 32, 64];
+        const nvrChannels = STD_NVR.find((v) => v >= totalCameras) || STD_NVR[STD_NVR.length - 1];
+        return { totalCameras, storageGB, storageTB, recommendedDiskTB, nvrChannels };
+    }, [cameras, bitrateMbps, recordingDays]);
     // Localisation & irradiation
     const [continent, setContinent] = (0, React.useState)("Afrique");
     const [country, setCountry] = (0, React.useState)("Bénin");
@@ -867,8 +916,23 @@ function SolarSizer() {
         chargeBreaker: 12000, dischargeBreaker: 12000, spdDC: 20000,
         acBreaker: 12000, acSwitch: 15000, spdAC: 15000, earthing: 25000, coffrets: 20000,
         ats: 65000, groupeBreaker: 18000, sbeeBreaker: 15000, pump: 180000,
+        acPipe: 3500, acCableElec: 1500, acBreakerUnit: 12000, acSupport: 15000,
+        nvr: 120000, hdd: 65000, camCable: 800, poeSwitch: 45000, camPower: 15000, camAccessories: 15000,
     });
-    const updateDevisPrice = (id, displayVal) => setDevisPrices((p) => ({ ...p, [id]: fromDisplayAmount(displayVal, devisCurrency) }));
+    const updateDevisPrice = (id, displayVal) => {
+        const xof = fromDisplayAmount(displayVal, devisCurrency);
+        if (id.startsWith("ac-unit-")) {
+            const roomId = parseInt(id.replace("ac-unit-", ""), 10);
+            setAcRooms((rs) => rs.map((r) => (r.id === roomId ? { ...r, price: xof } : r)));
+            return;
+        }
+        if (id.startsWith("cam-")) {
+            const camId = parseInt(id.replace("cam-", ""), 10);
+            setCameras((cs) => cs.map((c) => (c.id === camId ? { ...c, price: xof } : c)));
+            return;
+        }
+        setDevisPrices((p) => ({ ...p, [id]: xof }));
+    };
     const [laborCost, setLaborCost] = (0, React.useState)(100000);
     const [extraItems, setExtraItems] = (0, React.useState)([]);
     const [nextExtraId, setNextExtraId] = (0, React.useState)(1);
@@ -970,26 +1034,65 @@ function SolarSizer() {
     }, [service, loads, pumpWaterM3, pumpSourceType, pumpGeoHeight, pumpRefoulHeight, pumpLossPct, pumpEfficiency, pumpDriveEfficiency, pumpSystemType,
         systemVoltage, autonomyDays, dod, efficiency, hsp, tiltCorrection, safetyFactor, panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin, distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk]);
     const devisRows = (0, React.useMemo)(() => {
-        const rows = [
-            { id: "panels", label: `Panneau solaire ${panelWp} Wc`, qty: calc.totalPanels, unit: "u" },
-            { id: "batteries", label: `Batterie ${batteryAh} Ah / ${batteryVoltage} V`, qty: calc.totalBatteries, unit: "u" },
-            { id: "regulator", label: `Régulateur de charge ${calc.regulator} A`, qty: 1, unit: "u" },
-            { id: "inverter", label: `Onduleur ${fmt(calc.inverterVA)} VA`, qty: 1, unit: "u" },
-            { id: "cablePV", label: `Câble PV → régulateur (${calc.sectionPV} mm²)`, qty: distPV * 2, unit: "m" },
-            { id: "cableBatt", label: `Câble batterie → onduleur (${calc.sectionBatt} mm²)`, qty: calc.needsBattery ? distBatt * 2 : 0, unit: "m" },
-            { id: "stringFuse", label: `Fusible gPV ${calc.stringFuseStd} A`, qty: calc.panelsParallel > 1 ? calc.panelsParallel : 0, unit: "u" },
-            { id: "mainDC", label: `Sectionneur/disjoncteur DC général ${calc.mainDCStd} A`, qty: 1, unit: "u" },
-            { id: "chargeBreaker", label: `Disjoncteur DC charge ${calc.chargeBreakerStd} A`, qty: 1, unit: "u" },
-            { id: "dischargeBreaker", label: `Disjoncteur/sectionneur DC décharge ${calc.dischargeBreakerStd} A`, qty: calc.needsBattery ? 1 : 0, unit: "u" },
-            { id: "spdDC", label: `Parafoudre DC ${calc.spdType}`, qty: 1, unit: "u" },
-            { id: "acBreaker", label: `Disjoncteur AC ${calc.acBreakerStd} A`, qty: 1, unit: "u" },
-            { id: "acSwitch", label: `Interrupteur-sectionneur AC général ${calc.acBreakerStd} A`, qty: 1, unit: "u" },
-            { id: "spdAC", label: `Parafoudre AC ${calc.spdType}`, qty: 1, unit: "u" },
-            { id: "earthing", label: `Mise à la terre (${calc.earthSectionStd} mm²)`, qty: 1, unit: "forfait" },
-            { id: "coffrets", label: "Coffrets DC / AC", qty: 2, unit: "u" },
-        ];
-        if (service === "pompage") {
-            rows.push({ id: "pump", label: `Motopompe solaire (${fmt(calc.pumpElecPowerW)} W électrique requis)`, qty: 1, unit: "u" });
+        let rows = [];
+        if (service === "photovoltaique" || service === "pompage") {
+            rows = [
+                { id: "panels", label: `Panneau solaire ${panelWp} Wc`, qty: calc.totalPanels, unit: "u" },
+                { id: "batteries", label: `Batterie ${batteryAh} Ah / ${batteryVoltage} V`, qty: calc.totalBatteries, unit: "u" },
+                { id: "regulator", label: `Régulateur de charge ${calc.regulator} A`, qty: 1, unit: "u" },
+                { id: "inverter", label: `Onduleur ${fmt(calc.inverterVA)} VA`, qty: 1, unit: "u" },
+                { id: "cablePV", label: `Câble PV → régulateur (${calc.sectionPV} mm²)`, qty: distPV * 2, unit: "m" },
+                { id: "cableBatt", label: `Câble batterie → onduleur (${calc.sectionBatt} mm²)`, qty: calc.needsBattery ? distBatt * 2 : 0, unit: "m" },
+                { id: "stringFuse", label: `Fusible gPV ${calc.stringFuseStd} A`, qty: calc.panelsParallel > 1 ? calc.panelsParallel : 0, unit: "u" },
+                { id: "mainDC", label: `Sectionneur/disjoncteur DC général ${calc.mainDCStd} A`, qty: 1, unit: "u" },
+                { id: "chargeBreaker", label: `Disjoncteur DC charge ${calc.chargeBreakerStd} A`, qty: 1, unit: "u" },
+                { id: "dischargeBreaker", label: `Disjoncteur/sectionneur DC décharge ${calc.dischargeBreakerStd} A`, qty: calc.needsBattery ? 1 : 0, unit: "u" },
+                { id: "spdDC", label: `Parafoudre DC ${calc.spdType}`, qty: 1, unit: "u" },
+                { id: "acBreaker", label: `Disjoncteur AC ${calc.acBreakerStd} A`, qty: 1, unit: "u" },
+                { id: "acSwitch", label: `Interrupteur-sectionneur AC général ${calc.acBreakerStd} A`, qty: 1, unit: "u" },
+                { id: "spdAC", label: `Parafoudre AC ${calc.spdType}`, qty: 1, unit: "u" },
+                { id: "earthing", label: `Mise à la terre (${calc.earthSectionStd} mm²)`, qty: 1, unit: "forfait" },
+                { id: "coffrets", label: "Coffrets DC / AC", qty: 2, unit: "u" },
+            ];
+            if (service === "pompage") {
+                rows.push({ id: "pump", label: `Motopompe solaire (${fmt(calc.pumpElecPowerW)} W électrique requis)`, qty: 1, unit: "u" });
+            }
+        }
+        else if (service === "climatisation") {
+            acRooms.forEach((r) => {
+                const res = computeRoomBtu(r);
+                rows.push({ id: `ac-unit-${r.id}`, label: `Climatiseur split ${res.stdBtu.toLocaleString("fr-FR")} BTU/h (${r.name})`, qty: 1, unit: "u", priceXOF: r.price });
+                rows.push({ id: "acPipe", label: "Tuyauterie frigorifique cuivre (m)", qty: r.pipeLength, unit: "m" });
+                rows.push({ id: "acCableElec", label: "Câble électrique dédié climatiseur (m)", qty: r.pipeLength + 2, unit: "m" });
+                rows.push({ id: "acBreakerUnit", label: "Disjoncteur dédié climatiseur", qty: 1, unit: "u" });
+                rows.push({ id: "acSupport", label: "Support mural/socle unité extérieure", qty: 1, unit: "u" });
+            });
+            // Regrouper les lignes partagées (tuyauterie/câble/disjoncteur/support) en une seule ligne cumulée
+            const grouped = {};
+            rows.forEach((r) => {
+                if (r.priceXOF !== undefined) {
+                    grouped[r.id + Math.random()] = r;
+                    return;
+                }
+                if (!grouped[r.id])
+                    grouped[r.id] = { ...r, qty: 0 };
+                grouped[r.id].qty += r.qty;
+            });
+            rows = Object.values(grouped);
+            rows.push({ id: "earthing", label: "Mise à la terre installation climatisation", qty: 1, unit: "forfait" });
+        }
+        else if (service === "cameras") {
+            const typeLabels = { exterieure: "Extérieure (vision nocturne)", interieure: "Intérieure", dome: "Dôme", ptz: "PTZ motorisée" };
+            cameras.forEach((c) => {
+                rows.push({ id: `cam-${c.id}`, label: `${c.name} — ${typeLabels[c.type] || c.type}`, qty: c.qty, unit: "u", priceXOF: c.price });
+            });
+            rows.push({ id: "nvr", label: `Enregistreur NVR/DVR ${camCalc.nvrChannels} voies`, qty: 1, unit: "u" });
+            rows.push({ id: "hdd", label: `Disque dur ${camCalc.recommendedDiskTB} To (vidéosurveillance)`, qty: 1, unit: "u" });
+            rows.push({ id: "camCable", label: camIsIP ? "Câble réseau UTP (m)" : "Câble coaxial + alimentation (m)", qty: camCableLength, unit: "m" });
+            if (camIsIP)
+                rows.push({ id: "poeSwitch", label: "Switch PoE", qty: 1, unit: "u" });
+            rows.push({ id: "camPower", label: "Alimentation / transformateur", qty: camIsIP ? 0 : 1, unit: "u" });
+            rows.push({ id: "camAccessories", label: "Connecteurs & accessoires de fixation", qty: 1, unit: "forfait" });
         }
         const nSources = 1 + (sourceSBEE ? 1 : 0) + (sourceGroupe ? 1 : 0);
         if (nSources >= 2) {
@@ -1002,15 +1105,15 @@ function SolarSizer() {
         return rows
             .filter((r) => r.qty > 0)
             .map((r) => {
-            const priceXOF = devisPrices[r.id] || 0;
+            const priceXOF = r.priceXOF !== undefined ? r.priceXOF : (devisPrices[r.id] || 0);
             return { ...r, priceXOF, totalXOF: r.qty * priceXOF };
         });
-    }, [calc, devisPrices, distPV, distBatt, panelWp, batteryAh, batteryVoltage, sourceSBEE, sourceGroupe, service]);
+    }, [calc, devisPrices, distPV, distBatt, panelWp, batteryAh, batteryVoltage, sourceSBEE, sourceGroupe, service, acRooms, cameras, camCalc, camCableLength, camIsIP]);
     const extraRowsComputed = extraItems.map((it) => ({ ...it, totalXOF: it.qty * it.price }));
     const devisMaterialTotalXOF = devisRows.reduce((s, r) => s + r.totalXOF, 0) + extraRowsComputed.reduce((s, r) => s + r.totalXOF, 0);
     const devisGrandTotalXOF = devisMaterialTotalXOF + laborCost;
     // Sauvegarde locale (persistance entre les ouvertures de l'app sur le téléphone)
-    const STORAGE_KEY = "solar-sizer-data-v3";
+    const STORAGE_KEY = "solar-sizer-data-v4";
     const didLoad = React.useRef(false);
     React.useEffect(() => {
         try {
@@ -1066,6 +1169,14 @@ function SolarSizer() {
                 if (s.laborCost !== undefined) setLaborCost(s.laborCost);
                 if (s.extraItems !== undefined) setExtraItems(s.extraItems);
                 if (s.nextExtraId !== undefined) setNextExtraId(s.nextExtraId);
+                if (s.acRooms !== undefined) setAcRooms(s.acRooms);
+                if (s.nextAcId !== undefined) setNextAcId(s.nextAcId);
+                if (s.cameras !== undefined) setCameras(s.cameras);
+                if (s.nextCamId !== undefined) setNextCamId(s.nextCamId);
+                if (s.recordingDays !== undefined) setRecordingDays(s.recordingDays);
+                if (s.bitrateMbps !== undefined) setBitrateMbps(s.bitrateMbps);
+                if (s.camCableLength !== undefined) setCamCableLength(s.camCableLength);
+                if (s.camIsIP !== undefined) setCamIsIP(s.camIsIP);
             }
         }
         catch (e) { /* ignore corrupted storage */ }
@@ -1082,6 +1193,7 @@ function SolarSizer() {
             panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin,
             distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk,
             devisCurrency, devisPrices, laborCost, extraItems, nextExtraId,
+            acRooms, nextAcId, cameras, nextCamId, recordingDays, bitrateMbps, camCableLength, camIsIP,
         };
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -1094,7 +1206,8 @@ function SolarSizer() {
         systemVoltage, autonomyDays, dod, efficiency, safetyFactor,
         panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin,
         distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk,
-        devisCurrency, devisPrices, laborCost, extraItems, nextExtraId]);
+        devisCurrency, devisPrices, laborCost, extraItems, nextExtraId,
+        acRooms, nextAcId, cameras, nextCamId, recordingDays, bitrateMbps, camCableLength, camIsIP]);
     const printProps = {
         brand, logo, clientName, projectAddress, dateStr, loads, calc, country, continent,
         hsp, tiltCorrection, latitude, recommendedTilt, orientation,
@@ -1116,13 +1229,18 @@ function SolarSizer() {
                 React.createElement("div", { style: { color: C.amber, fontFamily: MONO }, className: "text-[11px] uppercase tracking-[0.2em] mb-1" },
                     brand,
                     " \u00B7 Outil d'ing\u00E9nierie"),
-                React.createElement("h1", { style: { color: C.text }, className: "text-2xl font-bold tracking-tight" }, service === "pompage" ? "Dimensionnement Pompage Solaire" : "Dimensionnement Solaire"),
-                React.createElement("p", { style: { color: C.muted }, className: "text-sm mt-1" }, service === "pompage"
-                    ? "Valable pour n'importe quel pays, n'importe quel forage ou réserve. Renseigne le besoin en eau : chaque résultat affiche sa formule et son calcul."
-                    : "Valable pour n'importe quel pays et n'importe quelle charge. Choisis ta localisation, renseigne tes appareils : chaque résultat affiche sa formule et son calcul."),
+                React.createElement("h1", { style: { color: C.text }, className: "text-2xl font-bold tracking-tight" }, { photovoltaique: "Dimensionnement Solaire", pompage: "Dimensionnement Pompage Solaire", climatisation: "Dimensionnement Climatisation", cameras: "Dimensionnement Vidéosurveillance" }[service]),
+                React.createElement("p", { style: { color: C.muted }, className: "text-sm mt-1" }, {
+                    photovoltaique: "Valable pour n'importe quel pays et n'importe quelle charge. Choisis ta localisation, renseigne tes appareils : chaque résultat affiche sa formule et son calcul.",
+                    pompage: "Valable pour n'importe quel pays, n'importe quel forage ou réserve. Renseigne le besoin en eau : chaque résultat affiche sa formule et son calcul.",
+                    climatisation: "Ajoute chaque pièce à climatiser pour obtenir la puissance frigorifique nécessaire et le devis complet.",
+                    cameras: "Ajoute tes caméras et la durée d'enregistrement souhaitée pour obtenir le stockage nécessaire et le devis complet.",
+                }[service]),
                 React.createElement("div", { className: "flex gap-2 mt-3" },
                     React.createElement("button", { onClick: () => setService("photovoltaique"), className: "text-xs px-3 py-1.5 rounded-md font-medium", style: { background: service === "photovoltaique" ? C.amber : C.panel2, color: service === "photovoltaique" ? "#0B1721" : C.muted, border: `1px solid ${C.border}`, fontFamily: SANS } }, "\u2600\uFE0F Photovolta\u00EFque (habitat)"),
-                    React.createElement("button", { onClick: () => setService("pompage"), className: "text-xs px-3 py-1.5 rounded-md font-medium", style: { background: service === "pompage" ? C.amber : C.panel2, color: service === "pompage" ? "#0B1721" : C.muted, border: `1px solid ${C.border}`, fontFamily: SANS } }, "\uD83D\uDCA7 Pompage solaire"))),
+                    React.createElement("button", { onClick: () => setService("pompage"), className: "text-xs px-3 py-1.5 rounded-md font-medium", style: { background: service === "pompage" ? C.amber : C.panel2, color: service === "pompage" ? "#0B1721" : C.muted, border: `1px solid ${C.border}`, fontFamily: SANS } }, "\uD83D\uDCA7 Pompage solaire"),
+                    React.createElement("button", { onClick: () => setService("climatisation"), className: "text-xs px-3 py-1.5 rounded-md font-medium", style: { background: service === "climatisation" ? C.amber : C.panel2, color: service === "climatisation" ? "#0B1721" : C.muted, border: `1px solid ${C.border}`, fontFamily: SANS } }, "\uD83E\uDDCA Climatisation / Froid"),
+                    React.createElement("button", { onClick: () => setService("cameras"), className: "text-xs px-3 py-1.5 rounded-md font-medium", style: { background: service === "cameras" ? C.amber : C.panel2, color: service === "cameras" ? "#0B1721" : C.muted, border: `1px solid ${C.border}`, fontFamily: SANS } }, "\uD83D\uDCF7 Cam\u00E9ras de surveillance"))),
             React.createElement(Section, { n: "00", title: "Marque & acc\u00E8s", subtitle: "R\u00E9glages pour distribuer ou vendre cet outil.", accent: C.teal },
                 React.createElement("div", { className: "grid sm:grid-cols-2 gap-3 mb-3" },
                     React.createElement(Field, { label: "Nom de la marque / du produit" },
@@ -1158,93 +1276,94 @@ function SolarSizer() {
                 React.createElement("p", { style: { color: C.muted, fontFamily: SANS }, className: "text-[11px] mt-2 flex items-start gap-1.5" },
                     React.createElement(Info, { size: 12, className: "mt-0.5 shrink-0" }),
                     "Ce verrou masque le contenu c\u00F4t\u00E9 client \u2014 pratique pour distribuer un fichier \u00AB d\u00E9mo \u00BB et livrer le code apr\u00E8s achat (sur Chariow par exemple), mais il n'encaisse pas de paiement lui-m\u00EAme : il n'est pas infranchissable pour un utilisateur technique.")),
-            React.createElement(Section, { n: "01", title: "Localisation & irradiation", subtitle: "L'irradiation solaire (HSP) change selon le pays \u2014 et l'inclinaison/orientation du champ influence le rendement r\u00E9el." },
-                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3" },
-                    React.createElement(Field, { label: "Continent" },
-                        React.createElement(Select, { value: continent, onChange: onContinentChange, options: Object.keys(REGIONS) })),
-                    React.createElement(Field, { label: "Pays" },
-                        React.createElement(Select, { value: country, onChange: onCountryChange, options: countryOptions })),
-                    React.createElement(Field, { label: "HSP (irradiation)", hint: "kWh/m\u00B2/j \u2014 modifiable" },
-                        React.createElement(NumInput, { value: hsp, onChange: setHsp, step: 0.1, suffix: "kWh/m\u00B2" })),
-                    React.createElement(Field, { label: "Latitude du site", hint: "\u00B0 \u2014 ex. 6.4 pour Cotonou" },
-                        React.createElement(NumInput, { value: latitude, onChange: setLatitude, step: 0.1 }))),
-                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-3 gap-3" },
-                    React.createElement(Field, { label: "Inclinaison optimale conseill\u00E9e", hint: "\u2248 latitude du site" },
-                        React.createElement("div", { className: "rounded-md px-2 py-1.5 text-sm", style: { background: C.panel2, border: `1px solid ${C.border}`, color: C.teal, fontFamily: MONO } },
-                            recommendedTilt,
-                            "\u00B0")),
-                    React.createElement(Field, { label: "Orientation conseill\u00E9e" },
-                        React.createElement("div", { className: "rounded-md px-2 py-1.5 text-sm flex items-center gap-1.5", style: { background: C.panel2, border: `1px solid ${C.border}`, color: C.teal, fontFamily: MONO } },
-                            React.createElement(Compass, { size: 13 }),
-                            " Face au ",
-                            orientation)),
-                    React.createElement(Field, { label: "Correction inclinaison/orientation", hint: "100% = installation optimale" },
-                        React.createElement(NumInput, { value: tiltCorrection, onChange: setTiltCorrection, suffix: "%" }))),
-                React.createElement("p", { style: { color: C.muted, fontFamily: SANS }, className: "text-[11px] mt-3 flex items-start gap-1.5" },
-                    React.createElement(Info, { size: 12, className: "mt-0.5 shrink-0" }),
-                    "Le HSP par pays est une ",
-                    React.createElement("b", null, "moyenne nationale indicative"),
-                    " (fortes variations r\u00E9gionales possibles) \u2014 \u00E0 affiner avec PVGIS, NASA POWER ou un service m\u00E9t\u00E9orologique local. La r\u00E8gle \u00AB inclinaison \u2248 latitude, panneaux face \u00E0 l'\u00E9quateur \u00BB est une approximation courante ; si ton installation s'en \u00E9carte, r\u00E9duis le facteur de correction (ex. 90% pour une toiture mal orient\u00E9e).")),
-            React.createElement("div", { className: "rounded-xl p-4 mb-6", style: { background: C.panel, border: `1px solid ${C.border}` } },
-                React.createElement("svg", { viewBox: "0 0 720 190", className: "w-full h-auto" },
-                    React.createElement("defs", null,
-                        React.createElement("style", null, `.flow{stroke-dasharray:6 6;animation:dash 1.4s linear infinite}@keyframes dash{to{stroke-dashoffset:-24}}`)),
-                    React.createElement("line", { x1: "95", y1: "95", x2: "185", y2: "95", stroke: C.amber, strokeWidth: "2", className: "flow" }),
-                    React.createElement("line", { x1: "255", y1: "95", x2: "345", y2: "95", stroke: C.amber, strokeWidth: "2", className: "flow" }),
-                    React.createElement("line", { x1: "415", y1: "95", x2: "480", y2: "95", stroke: C.teal, strokeWidth: "2", className: "flow" }),
-                    React.createElement("line", { x1: "480", y1: "95", x2: "480", y2: "60", stroke: C.teal, strokeWidth: "2" }),
-                    React.createElement("line", { x1: "480", y1: "60", x2: "555", y2: "60", stroke: C.teal, strokeWidth: "2", className: "flow" }),
-                    React.createElement("line", { x1: "480", y1: "95", x2: "480", y2: "130", stroke: C.teal, strokeWidth: "2" }),
-                    React.createElement("line", { x1: "480", y1: "130", x2: "555", y2: "130", stroke: C.teal, strokeWidth: "2", className: "flow" }),
-                    React.createElement("line", { x1: "625", y1: "60", x2: "690", y2: "95", stroke: C.amber, strokeWidth: "2", className: "flow" }),
-                    React.createElement("line", { x1: "625", y1: "130", x2: "690", y2: "95", stroke: C.amber, strokeWidth: "2", className: "flow" }),
-                    React.createElement("g", { transform: "translate(50,95)" },
-                        React.createElement("circle", { r: "26", fill: "none", stroke: C.amber, strokeWidth: "2" }),
-                        React.createElement(Sun, { size: 26, x: "-13", y: "-13", color: C.amber })),
-                    React.createElement("g", { transform: "translate(220,95)" },
-                        React.createElement("rect", { x: "-38", y: "-30", width: "76", height: "60", rx: "6", fill: C.panel2, stroke: C.amber, strokeWidth: "1.5" }),
-                        React.createElement("text", { x: "0", y: "-38", textAnchor: "middle", fill: C.text, fontSize: "11", fontFamily: SANS, fontWeight: "600" }, "Panneaux"),
-                        React.createElement("text", { x: "0", y: "4", textAnchor: "middle", fill: C.amber, fontSize: "13", fontFamily: MONO, fontWeight: "700" },
-                            fmt(calc.peakWp),
-                            " Wc"),
-                        React.createElement("text", { x: "0", y: "20", textAnchor: "middle", fill: C.muted, fontSize: "10", fontFamily: MONO },
-                            calc.totalPanels,
-                            "\u00D7 ",
-                            panelWp,
-                            "Wc")),
-                    React.createElement("g", { transform: "translate(380,95)" },
-                        React.createElement("rect", { x: "-35", y: "-30", width: "70", height: "60", rx: "6", fill: C.panel2, stroke: C.teal, strokeWidth: "1.5" }),
-                        React.createElement("text", { x: "0", y: "-38", textAnchor: "middle", fill: C.text, fontSize: "11", fontFamily: SANS, fontWeight: "600" }, "R\u00E9gulateur"),
-                        React.createElement("text", { x: "0", y: "4", textAnchor: "middle", fill: C.teal, fontSize: "13", fontFamily: MONO, fontWeight: "700" },
-                            calc.regulator,
-                            " A"),
-                        React.createElement("text", { x: "0", y: "20", textAnchor: "middle", fill: C.muted, fontSize: "10", fontFamily: MONO },
-                            fmt(calc.regCurrentRaw, 1),
-                            " A calc.")),
-                    React.createElement("g", { transform: "translate(555,60)" },
-                        React.createElement("rect", { x: "-38", y: "-24", width: "76", height: "48", rx: "6", fill: C.panel2, stroke: C.teal, strokeWidth: "1.5" }),
-                        React.createElement("text", { x: "0", y: "-30", textAnchor: "middle", fill: C.text, fontSize: "11", fontFamily: SANS, fontWeight: "600" }, "Batterie"),
-                        React.createElement("text", { x: "0", y: "4", textAnchor: "middle", fill: C.teal, fontSize: "12", fontFamily: MONO, fontWeight: "700" },
-                            fmt(calc.battCapTotalAh),
-                            " Ah")),
-                    React.createElement("g", { transform: "translate(555,130)" },
-                        React.createElement("rect", { x: "-38", y: "-24", width: "76", height: "48", rx: "6", fill: C.panel2, stroke: C.amber, strokeWidth: "1.5" }),
-                        React.createElement("text", { x: "0", y: "42", textAnchor: "middle", fill: C.text, fontSize: "11", fontFamily: SANS, fontWeight: "600" }, "Onduleur"),
-                        React.createElement("text", { x: "0", y: "4", textAnchor: "middle", fill: C.amber, fontSize: "12", fontFamily: MONO, fontWeight: "700" },
-                            fmt(calc.inverterVA),
-                            " VA")),
-                    React.createElement("g", { transform: "translate(690,95)" },
-                        React.createElement("circle", { r: "24", fill: "none", stroke: C.amber, strokeWidth: "2" }),
-                        React.createElement(Plug, { size: 22, x: "-11", y: "-11", color: C.amber }),
-                        React.createElement("text", { x: "0", y: "42", textAnchor: "middle", fill: C.muted, fontSize: "10", fontFamily: MONO },
-                            fmt(calc.dailyEnergyWh),
-                            " Wh/j"))),
-                React.createElement("div", { className: "flex flex-wrap gap-2 mt-3" },
-                    React.createElement(Stat, { icon: Sun, label: "Puissance cr\u00EAte", value: fmt(calc.peakWp), unit: "Wc" }),
-                    React.createElement(Stat, { icon: Battery, label: "Capacit\u00E9 batterie", value: fmt(calc.battCapTotalAh), unit: "Ah", accent: C.teal }),
-                    React.createElement(Stat, { icon: Gauge, label: "R\u00E9gulateur", value: calc.regulator, unit: "A", accent: C.teal }),
-                    React.createElement(Stat, { icon: Zap, label: "Onduleur", value: fmt(calc.inverterVA), unit: "VA" }))),
-            React.createElement(Section, { n: "02", title: service === "pompage" ? "Besoin en eau & pompage" : "Charges à alimenter", subtitle: service === "pompage" ? "Volume d'eau, hauteurs et rendements déterminent l'énergie électrique nécessaire au pompage." : "Ajoute chaque appareil, sa puissance, sa quantité et sa durée d'utilisation quotidienne." }, service === "pompage" ? (React.createElement(React.Fragment, null,
+            (service === "photovoltaique" || service === "pompage") && (React.createElement(React.Fragment, null,
+                React.createElement(Section, { n: "01", title: "Localisation & irradiation", subtitle: "L'irradiation solaire (HSP) change selon le pays \u2014 et l'inclinaison/orientation du champ influence le rendement r\u00E9el." },
+                    React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3" },
+                        React.createElement(Field, { label: "Continent" },
+                            React.createElement(Select, { value: continent, onChange: onContinentChange, options: Object.keys(REGIONS) })),
+                        React.createElement(Field, { label: "Pays" },
+                            React.createElement(Select, { value: country, onChange: onCountryChange, options: countryOptions })),
+                        React.createElement(Field, { label: "HSP (irradiation)", hint: "kWh/m\u00B2/j \u2014 modifiable" },
+                            React.createElement(NumInput, { value: hsp, onChange: setHsp, step: 0.1, suffix: "kWh/m\u00B2" })),
+                        React.createElement(Field, { label: "Latitude du site", hint: "\u00B0 \u2014 ex. 6.4 pour Cotonou" },
+                            React.createElement(NumInput, { value: latitude, onChange: setLatitude, step: 0.1 }))),
+                    React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-3 gap-3" },
+                        React.createElement(Field, { label: "Inclinaison optimale conseill\u00E9e", hint: "\u2248 latitude du site" },
+                            React.createElement("div", { className: "rounded-md px-2 py-1.5 text-sm", style: { background: C.panel2, border: `1px solid ${C.border}`, color: C.teal, fontFamily: MONO } },
+                                recommendedTilt,
+                                "\u00B0")),
+                        React.createElement(Field, { label: "Orientation conseill\u00E9e" },
+                            React.createElement("div", { className: "rounded-md px-2 py-1.5 text-sm flex items-center gap-1.5", style: { background: C.panel2, border: `1px solid ${C.border}`, color: C.teal, fontFamily: MONO } },
+                                React.createElement(Compass, { size: 13 }),
+                                " Face au ",
+                                orientation)),
+                        React.createElement(Field, { label: "Correction inclinaison/orientation", hint: "100% = installation optimale" },
+                            React.createElement(NumInput, { value: tiltCorrection, onChange: setTiltCorrection, suffix: "%" }))),
+                    React.createElement("p", { style: { color: C.muted, fontFamily: SANS }, className: "text-[11px] mt-3 flex items-start gap-1.5" },
+                        React.createElement(Info, { size: 12, className: "mt-0.5 shrink-0" }),
+                        "Le HSP par pays est une ",
+                        React.createElement("b", null, "moyenne nationale indicative"),
+                        " (fortes variations r\u00E9gionales possibles) \u2014 \u00E0 affiner avec PVGIS, NASA POWER ou un service m\u00E9t\u00E9orologique local. La r\u00E8gle \u00AB inclinaison \u2248 latitude, panneaux face \u00E0 l'\u00E9quateur \u00BB est une approximation courante ; si ton installation s'en \u00E9carte, r\u00E9duis le facteur de correction (ex. 90% pour une toiture mal orient\u00E9e).")),
+                React.createElement("div", { className: "rounded-xl p-4 mb-6", style: { background: C.panel, border: `1px solid ${C.border}` } },
+                    React.createElement("svg", { viewBox: "0 0 720 190", className: "w-full h-auto" },
+                        React.createElement("defs", null,
+                            React.createElement("style", null, `.flow{stroke-dasharray:6 6;animation:dash 1.4s linear infinite}@keyframes dash{to{stroke-dashoffset:-24}}`)),
+                        React.createElement("line", { x1: "95", y1: "95", x2: "185", y2: "95", stroke: C.amber, strokeWidth: "2", className: "flow" }),
+                        React.createElement("line", { x1: "255", y1: "95", x2: "345", y2: "95", stroke: C.amber, strokeWidth: "2", className: "flow" }),
+                        React.createElement("line", { x1: "415", y1: "95", x2: "480", y2: "95", stroke: C.teal, strokeWidth: "2", className: "flow" }),
+                        React.createElement("line", { x1: "480", y1: "95", x2: "480", y2: "60", stroke: C.teal, strokeWidth: "2" }),
+                        React.createElement("line", { x1: "480", y1: "60", x2: "555", y2: "60", stroke: C.teal, strokeWidth: "2", className: "flow" }),
+                        React.createElement("line", { x1: "480", y1: "95", x2: "480", y2: "130", stroke: C.teal, strokeWidth: "2" }),
+                        React.createElement("line", { x1: "480", y1: "130", x2: "555", y2: "130", stroke: C.teal, strokeWidth: "2", className: "flow" }),
+                        React.createElement("line", { x1: "625", y1: "60", x2: "690", y2: "95", stroke: C.amber, strokeWidth: "2", className: "flow" }),
+                        React.createElement("line", { x1: "625", y1: "130", x2: "690", y2: "95", stroke: C.amber, strokeWidth: "2", className: "flow" }),
+                        React.createElement("g", { transform: "translate(50,95)" },
+                            React.createElement("circle", { r: "26", fill: "none", stroke: C.amber, strokeWidth: "2" }),
+                            React.createElement(Sun, { size: 26, x: "-13", y: "-13", color: C.amber })),
+                        React.createElement("g", { transform: "translate(220,95)" },
+                            React.createElement("rect", { x: "-38", y: "-30", width: "76", height: "60", rx: "6", fill: C.panel2, stroke: C.amber, strokeWidth: "1.5" }),
+                            React.createElement("text", { x: "0", y: "-38", textAnchor: "middle", fill: C.text, fontSize: "11", fontFamily: SANS, fontWeight: "600" }, "Panneaux"),
+                            React.createElement("text", { x: "0", y: "4", textAnchor: "middle", fill: C.amber, fontSize: "13", fontFamily: MONO, fontWeight: "700" },
+                                fmt(calc.peakWp),
+                                " Wc"),
+                            React.createElement("text", { x: "0", y: "20", textAnchor: "middle", fill: C.muted, fontSize: "10", fontFamily: MONO },
+                                calc.totalPanels,
+                                "\u00D7 ",
+                                panelWp,
+                                "Wc")),
+                        React.createElement("g", { transform: "translate(380,95)" },
+                            React.createElement("rect", { x: "-35", y: "-30", width: "70", height: "60", rx: "6", fill: C.panel2, stroke: C.teal, strokeWidth: "1.5" }),
+                            React.createElement("text", { x: "0", y: "-38", textAnchor: "middle", fill: C.text, fontSize: "11", fontFamily: SANS, fontWeight: "600" }, "R\u00E9gulateur"),
+                            React.createElement("text", { x: "0", y: "4", textAnchor: "middle", fill: C.teal, fontSize: "13", fontFamily: MONO, fontWeight: "700" },
+                                calc.regulator,
+                                " A"),
+                            React.createElement("text", { x: "0", y: "20", textAnchor: "middle", fill: C.muted, fontSize: "10", fontFamily: MONO },
+                                fmt(calc.regCurrentRaw, 1),
+                                " A calc.")),
+                        React.createElement("g", { transform: "translate(555,60)" },
+                            React.createElement("rect", { x: "-38", y: "-24", width: "76", height: "48", rx: "6", fill: C.panel2, stroke: C.teal, strokeWidth: "1.5" }),
+                            React.createElement("text", { x: "0", y: "-30", textAnchor: "middle", fill: C.text, fontSize: "11", fontFamily: SANS, fontWeight: "600" }, "Batterie"),
+                            React.createElement("text", { x: "0", y: "4", textAnchor: "middle", fill: C.teal, fontSize: "12", fontFamily: MONO, fontWeight: "700" },
+                                fmt(calc.battCapTotalAh),
+                                " Ah")),
+                        React.createElement("g", { transform: "translate(555,130)" },
+                            React.createElement("rect", { x: "-38", y: "-24", width: "76", height: "48", rx: "6", fill: C.panel2, stroke: C.amber, strokeWidth: "1.5" }),
+                            React.createElement("text", { x: "0", y: "42", textAnchor: "middle", fill: C.text, fontSize: "11", fontFamily: SANS, fontWeight: "600" }, "Onduleur"),
+                            React.createElement("text", { x: "0", y: "4", textAnchor: "middle", fill: C.amber, fontSize: "12", fontFamily: MONO, fontWeight: "700" },
+                                fmt(calc.inverterVA),
+                                " VA")),
+                        React.createElement("g", { transform: "translate(690,95)" },
+                            React.createElement("circle", { r: "24", fill: "none", stroke: C.amber, strokeWidth: "2" }),
+                            React.createElement(Plug, { size: 22, x: "-11", y: "-11", color: C.amber }),
+                            React.createElement("text", { x: "0", y: "42", textAnchor: "middle", fill: C.muted, fontSize: "10", fontFamily: MONO },
+                                fmt(calc.dailyEnergyWh),
+                                " Wh/j"))),
+                    React.createElement("div", { className: "flex flex-wrap gap-2 mt-3" },
+                        React.createElement(Stat, { icon: Sun, label: "Puissance cr\u00EAte", value: fmt(calc.peakWp), unit: "Wc" }),
+                        React.createElement(Stat, { icon: Battery, label: "Capacit\u00E9 batterie", value: fmt(calc.battCapTotalAh), unit: "Ah", accent: C.teal }),
+                        React.createElement(Stat, { icon: Gauge, label: "R\u00E9gulateur", value: calc.regulator, unit: "A", accent: C.teal }),
+                        React.createElement(Stat, { icon: Zap, label: "Onduleur", value: fmt(calc.inverterVA), unit: "VA" }))))),
+            (service === "photovoltaique" || service === "pompage") && (React.createElement(Section, { n: "02", title: service === "pompage" ? "Besoin en eau & pompage" : "Charges à alimenter", subtitle: service === "pompage" ? "Volume d'eau, hauteurs et rendements déterminent l'énergie électrique nécessaire au pompage." : "Ajoute chaque appareil, sa puissance, sa quantité et sa durée d'utilisation quotidienne." }, service === "pompage" ? (React.createElement(React.Fragment, null,
                 React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4" },
                     React.createElement(Field, { label: "Besoin en eau" },
                         React.createElement(NumInput, { value: pumpWaterM3, onChange: setPumpWaterM3, step: 0.5, suffix: "m\u00B3/j" })),
@@ -1309,45 +1428,139 @@ function SolarSizer() {
                         React.createElement("span", { style: { color: C.muted } },
                             " \u00B7 pointe ",
                             fmt(calc.maxInstantW),
-                            " W")))))),
-            React.createElement(Section, { n: "03", title: "Param\u00E8tres du syst\u00E8me" },
-                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4" },
-                    React.createElement(Field, { label: "Tension syst\u00E8me" },
-                        React.createElement(Select, { value: systemVoltage, onChange: (v) => setSystemVoltage(parseFloat(v)), options: [12, 24, 48] })),
-                    calc.needsBattery && React.createElement(Field, { label: "Autonomie", hint: "jours" },
-                        React.createElement(NumInput, { value: autonomyDays, onChange: setAutonomyDays, step: 0.5 })),
-                    calc.needsBattery && React.createElement(Field, { label: "D\u00E9charge max (DOD)", hint: "50% Pb-acide \u00B7 80% Li-ion" },
-                        React.createElement(NumInput, { value: dod, onChange: setDod, suffix: "%" })),
-                    React.createElement(Field, { label: "Rendement syst\u00E8me", hint: "c\u00E2blage + r\u00E9gulateur + onduleur" },
-                        React.createElement(NumInput, { value: efficiency, onChange: setEfficiency, suffix: "%" })),
-                    React.createElement(Field, { label: "Coeff. de s\u00E9curit\u00E9 panneaux" },
-                        React.createElement(NumInput, { value: safetyFactor, onChange: setSafetyFactor, step: 0.05 })),
-                    React.createElement(Field, { label: "Marge r\u00E9gulateur" },
-                        React.createElement(NumInput, { value: regMargin, onChange: setRegMargin, step: 0.05 })),
-                    React.createElement(Field, { label: "Marge onduleur" },
-                        React.createElement(NumInput, { value: inverterMargin, onChange: setInverterMargin, step: 0.05 }))),
-                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" },
-                    React.createElement(Field, { label: "Panneau \u2014 Wc unitaire" },
-                        React.createElement(NumInput, { value: panelWp, onChange: setPanelWp, step: 10, suffix: "Wc" })),
-                    React.createElement(Field, { label: "Panneau \u2014 tension nominale" },
-                        React.createElement(Select, { value: panelVoltage, onChange: (v) => setPanelVoltage(parseFloat(v)), options: [12, 24] })),
-                    calc.needsBattery && React.createElement(Field, { label: "Batterie \u2014 capacit\u00E9 unitaire" },
-                        React.createElement(NumInput, { value: batteryAh, onChange: setBatteryAh, step: 10, suffix: "Ah" })),
-                    calc.needsBattery && React.createElement(Field, { label: "Batterie \u2014 tension unitaire" },
-                        React.createElement(Select, { value: batteryVoltage, onChange: (v) => setBatteryVoltage(parseFloat(v)), options: [2, 6, 12] }))),
-                React.createElement("div", { style: { borderTop: `1px dashed ${C.border}` }, className: "grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4 pt-4" },
-                    React.createElement(Field, { label: "Isc panneau unitaire", hint: "A \u2014 datasheet" },
-                        React.createElement(NumInput, { value: panelIsc, onChange: setPanelIsc, step: 0.1, suffix: "A" })),
-                    React.createElement(Field, { label: "Voc panneau unitaire", hint: "V \u2014 datasheet" },
-                        React.createElement(NumInput, { value: panelVoc, onChange: setPanelVoc, step: 0.5, suffix: "V" })),
-                    React.createElement(Field, { label: "Coeff. Voc \u00E0 froid" },
-                        React.createElement(NumInput, { value: vocColdFactor, onChange: setVocColdFactor, step: 0.01 })),
-                    React.createElement(Field, { label: "R\u00E9seau AC sortie onduleur" },
-                        React.createElement(Select, { value: acPhase, onChange: setAcPhase, options: ["mono", "tri"], labels: ["230V monophasé", "400V triphasé"] })),
-                    React.createElement(Field, { label: "Zone \u00E0 risque de foudre \u00E9lev\u00E9" },
+                            " W"))))))),
+            service === "climatisation" && (React.createElement(Section, { n: "02", title: "Pi\u00E8ces \u00E0 climatiser", subtitle: "Un climatiseur par pi\u00E8ce. Choisis le mode rapide (superficie) ou d\u00E9taill\u00E9 (isolation, ensoleillement, occupants, appareils) pour chacune." },
+                React.createElement("div", { className: "space-y-4" }, acRooms.map((r) => {
+                    const res = computeRoomBtu(r);
+                    return (React.createElement("div", { key: r.id, className: "rounded-lg p-3", style: { background: C.panel2, border: `1px solid ${C.border}` } },
+                        React.createElement("div", { className: "flex items-center justify-between gap-2 mb-2" },
+                            React.createElement("input", { value: r.name, onChange: (e) => updateAcRoom(r.id, "name", e.target.value), className: "bg-transparent outline-none text-sm font-medium flex-1", style: { color: C.text, fontFamily: SANS } }),
+                            React.createElement("div", { className: "w-40" },
+                                React.createElement(Select, { value: r.mode, onChange: (v) => updateAcRoom(r.id, "mode", v), options: ["rapide", "detaille"], labels: ["Rapide (superficie)", "Détaillé"] })),
+                            React.createElement("button", { onClick: () => removeAcRoom(r.id), "aria-label": "Supprimer" },
+                                React.createElement(Trash2, { size: 15, color: C.danger }))),
+                        React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" },
+                            React.createElement(Field, { label: "Superficie" },
+                                React.createElement(NumInput, { value: r.surface, onChange: (v) => updateAcRoom(r.id, "surface", v), step: 1, suffix: "m\u00B2" })),
+                            r.mode === "detaille" && React.createElement(React.Fragment, null,
+                                React.createElement(Field, { label: "Hauteur sous plafond" },
+                                    React.createElement(NumInput, { value: r.height, onChange: (v) => updateAcRoom(r.id, "height", v), step: 0.1, suffix: "m" })),
+                                React.createElement(Field, { label: "Isolation" },
+                                    React.createElement(Select, { value: r.insulation, onChange: (v) => updateAcRoom(r.id, "insulation", v), options: ["bonne", "moyenne", "mauvaise"], labels: ["Bonne", "Moyenne", "Mauvaise"] })),
+                                React.createElement(Field, { label: "Exposition au soleil" },
+                                    React.createElement(Select, { value: r.sun, onChange: (v) => updateAcRoom(r.id, "sun", v), options: ["ombragee", "normale", "exposee"], labels: ["Ombragée", "Normale", "Très exposée"] })),
+                                React.createElement(Field, { label: "Occupants" },
+                                    React.createElement(NumInput, { value: r.occupants, onChange: (v) => updateAcRoom(r.id, "occupants", v), step: 1 })),
+                                React.createElement(Field, { label: "Appareils \u00E9lectriques dans la pi\u00E8ce" },
+                                    React.createElement(NumInput, { value: r.appliancesW, onChange: (v) => updateAcRoom(r.id, "appliancesW", v), step: 50, suffix: "W" }))),
+                            React.createElement(Field, { label: "Distance au groupe ext\u00E9rieur" },
+                                React.createElement(NumInput, { value: r.pipeLength, onChange: (v) => updateAcRoom(r.id, "pipeLength", v), step: 1, suffix: "m" })),
+                            React.createElement(Field, { label: "Prix climatiseur" },
+                                React.createElement(NumInput, { value: r.price, onChange: (v) => updateAcRoom(r.id, "price", v), step: 5000, suffix: "FCFA" }))),
+                        React.createElement("div", { className: "flex items-center justify-between mt-2 pt-2", style: { borderTop: `1px dashed ${C.border}` } },
+                            React.createElement("span", { style: { color: C.muted, fontFamily: MONO }, className: "text-xs" },
+                                fmt(res.btu),
+                                " BTU/h n\u00E9cessaires"),
+                            React.createElement("span", { style: { color: C.amber, fontFamily: MONO }, className: "text-sm font-bold" },
+                                "\u2192 Climatiseur ",
+                                res.stdBtu.toLocaleString("fr-FR"),
+                                " BTU/h (",
+                                res.cv,
+                                ")"))));
+                })),
+                React.createElement("button", { onClick: addAcRoom, className: "flex items-center gap-1.5 mt-3 text-xs px-2.5 py-1.5 rounded-md", style: { color: C.teal, border: `1px solid ${C.border}`, fontFamily: SANS } },
+                    React.createElement(Plus, { size: 13 }),
+                    " Ajouter une pi\u00E8ce"))),
+            service === "cameras" && (React.createElement(Section, { n: "02", title: "Cam\u00E9ras & enregistrement", subtitle: "Ajoute chaque type de cam\u00E9ra, puis renseigne la dur\u00E9e d'enregistrement souhait\u00E9e pour calculer le stockage n\u00E9cessaire." },
+                React.createElement("div", { className: "overflow-x-auto -mx-1 mb-4" },
+                    React.createElement("table", { className: "w-full text-sm min-w-[520px]" },
+                        React.createElement("thead", null,
+                            React.createElement("tr", { style: { color: C.muted, fontFamily: SANS }, className: "text-[11px] uppercase tracking-wider text-left" },
+                                React.createElement("th", { className: "py-1 px-1 font-normal" }, "Cam\u00E9ra"),
+                                React.createElement("th", { className: "py-1 px-1 font-normal" }, "Type"),
+                                React.createElement("th", { className: "py-1 px-1 font-normal" }, "Qt\u00E9"),
+                                React.createElement("th", { className: "py-1 px-1 font-normal text-right" }, "Prix unitaire"),
+                                React.createElement("th", { className: "py-1 px-1" }))),
+                        React.createElement("tbody", null, cameras.map((c) => (React.createElement("tr", { key: c.id, style: { borderTop: `1px solid ${C.border}` } },
+                            React.createElement("td", { className: "py-1.5 px-1" },
+                                React.createElement("input", { value: c.name, onChange: (e) => updateCamera(c.id, "name", e.target.value), className: "w-full bg-transparent outline-none text-sm", style: { color: C.text } })),
+                            React.createElement("td", { className: "py-1.5 px-1 w-40" },
+                                React.createElement(Select, { value: c.type, onChange: (v) => updateCamera(c.id, "type", v), options: ["exterieure", "interieure", "dome", "ptz"], labels: ["Extérieure (vision nocturne)", "Intérieure", "Dôme", "PTZ motorisée"] })),
+                            React.createElement("td", { className: "py-1.5 px-1 w-14" },
+                                React.createElement("input", { type: "number", value: c.qty, onChange: (e) => updateCamera(c.id, "qty", parseFloat(e.target.value) || 0), className: "w-full bg-transparent outline-none text-sm", style: { color: C.text, fontFamily: MONO } })),
+                            React.createElement("td", { className: "py-1.5 px-1 w-24" },
+                                React.createElement("input", { type: "number", value: c.price, onChange: (e) => updateCamera(c.id, "price", parseFloat(e.target.value) || 0), className: "w-full bg-transparent outline-none text-sm text-right", style: { color: C.text, fontFamily: MONO } })),
+                            React.createElement("td", { className: "py-1.5 px-1 text-right" },
+                                React.createElement("button", { onClick: () => removeCamera(c.id), "aria-label": "Supprimer" },
+                                    React.createElement(Trash2, { size: 15, color: C.danger }))))))))),
+                React.createElement("button", { onClick: addCamera, className: "flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md mb-4", style: { color: C.teal, border: `1px solid ${C.border}`, fontFamily: SANS } },
+                    React.createElement(Plus, { size: 13 }),
+                    " Ajouter un type de cam\u00E9ra"),
+                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3", style: { borderTop: `1px dashed ${C.border}` } },
+                    React.createElement(Field, { label: "Jours d'enregistrement souhait\u00E9s" },
+                        React.createElement(NumInput, { value: recordingDays, onChange: setRecordingDays, step: 1, suffix: "j" })),
+                    React.createElement(Field, { label: "D\u00E9bit estim\u00E9 par cam\u00E9ra", hint: "H.265 1080p \u2248 4 Mbps" },
+                        React.createElement(NumInput, { value: bitrateMbps, onChange: setBitrateMbps, step: 0.5, suffix: "Mbps" })),
+                    React.createElement(Field, { label: "Distance de c\u00E2blage totale" },
+                        React.createElement(NumInput, { value: camCableLength, onChange: setCamCableLength, step: 5, suffix: "m" })),
+                    React.createElement(Field, { label: "Cam\u00E9ras IP (PoE)" },
                         React.createElement("label", { className: "flex items-center gap-2 text-xs cursor-pointer h-[34px]", style: { color: C.text, fontFamily: SANS } },
-                            React.createElement("input", { type: "checkbox", checked: highLightningRisk, onChange: (e) => setHighLightningRisk(e.target.checked) }),
-                            " Oui")))),
+                            React.createElement("input", { type: "checkbox", checked: camIsIP, onChange: (e) => setCamIsIP(e.target.checked) }),
+                            " Oui, r\u00E9seau PoE"))),
+                React.createElement("div", { className: "flex items-center justify-between mt-3 pt-3", style: { borderTop: `1px dashed ${C.border}` } },
+                    React.createElement("span", { style: { color: C.muted, fontFamily: SANS }, className: "text-xs" },
+                        camCalc.totalCameras,
+                        " cam\u00E9ra(s) \u00B7 ",
+                        camCalc.nvrChannels,
+                        " voies NVR recommand\u00E9es"),
+                    React.createElement("div", { style: { fontFamily: MONO, color: C.text }, className: "text-sm" },
+                        "Stockage : ",
+                        React.createElement("b", { style: { color: C.amber } },
+                            fmt(camCalc.storageTB, 2),
+                            " To"),
+                        React.createElement("span", { style: { color: C.muted } },
+                            " \u2192 disque ",
+                            camCalc.recommendedDiskTB,
+                            " To"))))),
+            (service === "photovoltaique" || service === "pompage") && (React.createElement(React.Fragment, null,
+                React.createElement(Section, { n: "03", title: "Param\u00E8tres du syst\u00E8me" },
+                    React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4" },
+                        React.createElement(Field, { label: "Tension syst\u00E8me" },
+                            React.createElement(Select, { value: systemVoltage, onChange: (v) => setSystemVoltage(parseFloat(v)), options: [12, 24, 48] })),
+                        calc.needsBattery && React.createElement(Field, { label: "Autonomie", hint: "jours" },
+                            React.createElement(NumInput, { value: autonomyDays, onChange: setAutonomyDays, step: 0.5 })),
+                        calc.needsBattery && React.createElement(Field, { label: "D\u00E9charge max (DOD)", hint: "50% Pb-acide \u00B7 80% Li-ion" },
+                            React.createElement(NumInput, { value: dod, onChange: setDod, suffix: "%" })),
+                        React.createElement(Field, { label: "Rendement syst\u00E8me", hint: "c\u00E2blage + r\u00E9gulateur + onduleur" },
+                            React.createElement(NumInput, { value: efficiency, onChange: setEfficiency, suffix: "%" })),
+                        React.createElement(Field, { label: "Coeff. de s\u00E9curit\u00E9 panneaux" },
+                            React.createElement(NumInput, { value: safetyFactor, onChange: setSafetyFactor, step: 0.05 })),
+                        React.createElement(Field, { label: "Marge r\u00E9gulateur" },
+                            React.createElement(NumInput, { value: regMargin, onChange: setRegMargin, step: 0.05 })),
+                        React.createElement(Field, { label: "Marge onduleur" },
+                            React.createElement(NumInput, { value: inverterMargin, onChange: setInverterMargin, step: 0.05 }))),
+                    React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" },
+                        React.createElement(Field, { label: "Panneau \u2014 Wc unitaire" },
+                            React.createElement(NumInput, { value: panelWp, onChange: setPanelWp, step: 10, suffix: "Wc" })),
+                        React.createElement(Field, { label: "Panneau \u2014 tension nominale" },
+                            React.createElement(Select, { value: panelVoltage, onChange: (v) => setPanelVoltage(parseFloat(v)), options: [12, 24] })),
+                        calc.needsBattery && React.createElement(Field, { label: "Batterie \u2014 capacit\u00E9 unitaire" },
+                            React.createElement(NumInput, { value: batteryAh, onChange: setBatteryAh, step: 10, suffix: "Ah" })),
+                        calc.needsBattery && React.createElement(Field, { label: "Batterie \u2014 tension unitaire" },
+                            React.createElement(Select, { value: batteryVoltage, onChange: (v) => setBatteryVoltage(parseFloat(v)), options: [2, 6, 12] }))),
+                    React.createElement("div", { style: { borderTop: `1px dashed ${C.border}` }, className: "grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4 pt-4" },
+                        React.createElement(Field, { label: "Isc panneau unitaire", hint: "A \u2014 datasheet" },
+                            React.createElement(NumInput, { value: panelIsc, onChange: setPanelIsc, step: 0.1, suffix: "A" })),
+                        React.createElement(Field, { label: "Voc panneau unitaire", hint: "V \u2014 datasheet" },
+                            React.createElement(NumInput, { value: panelVoc, onChange: setPanelVoc, step: 0.5, suffix: "V" })),
+                        React.createElement(Field, { label: "Coeff. Voc \u00E0 froid" },
+                            React.createElement(NumInput, { value: vocColdFactor, onChange: setVocColdFactor, step: 0.01 })),
+                        React.createElement(Field, { label: "R\u00E9seau AC sortie onduleur" },
+                            React.createElement(Select, { value: acPhase, onChange: setAcPhase, options: ["mono", "tri"], labels: ["230V monophasé", "400V triphasé"] })),
+                        React.createElement(Field, { label: "Zone \u00E0 risque de foudre \u00E9lev\u00E9" },
+                            React.createElement("label", { className: "flex items-center gap-2 text-xs cursor-pointer h-[34px]", style: { color: C.text, fontFamily: SANS } },
+                                React.createElement("input", { type: "checkbox", checked: highLightningRisk, onChange: (e) => setHighLightningRisk(e.target.checked) }),
+                                " Oui")))))),
             React.createElement(Section, { n: "03b", title: "Sources d'alimentation & secours", subtitle: "Le solaire est toujours prioritaire. Coche les autres sources disponibles pour pr\u00E9voir l'inverseur de source (ATS)." },
                 React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3" },
                     React.createElement("div", { className: "rounded-lg p-3 flex items-center gap-2", style: { background: C.panel2, border: `1px solid ${C.border}` } },
@@ -1374,41 +1587,60 @@ function SolarSizer() {
                     React.createElement("div", { className: "flex-1" },
                         React.createElement(TextInput, { value: enteredCode, onChange: setEnteredCode, mono: true }))),
                 React.createElement("a", { href: purchaseLink, target: "_blank", rel: "noreferrer", style: { color: C.teal, fontFamily: SANS }, className: "text-xs underline mt-3 inline-block" }, "Pas encore de code ? Obtenir l'acc\u00E8s \u2192"))) : (React.createElement(React.Fragment, null,
-                React.createElement(Section, { n: "04", title: "R\u00E9sultats d\u00E9taill\u00E9s \u2014 formules & calculs", subtitle: "Chaque valeur affiche la formule utilis\u00E9e et le calcul avec tes propres chiffres.", accent: C.teal },
-                    React.createElement("div", { className: "flex items-center gap-1.5 mb-1", style: { color: C.amber } },
-                        React.createElement(Unlock, { size: 13 }),
-                        React.createElement("span", { style: { fontFamily: SANS }, className: "text-xs" }, "Contenu d\u00E9bloqu\u00E9")),
-                    React.createElement(Formula, { label: "\u00C9nergie journali\u00E8re corrig\u00E9e", formula: "Ec' = Ec / \u03B7", sub: `= ${fmt(calc.dailyEnergyWh)} Wh ÷ ${efficiency}%`, result: fmt(calc.correctedEnergyWh), unit: "Wh/j" }),
-                    React.createElement(Formula, { label: "Irradiation effective retenue", formula: "HSPeff = HSP \u00D7 correction", sub: `= ${hsp} × ${tiltCorrection}%`, result: fmt(calc.effHsp, 2), unit: "kWh/m\u00B2/j", accent: C.teal }),
-                    React.createElement(Formula, { label: "Puissance cr\u00EAte du champ photovolta\u00EFque", formula: "Pc = (Ec' \u00D7 Ks) / HSPeff", sub: `= (${fmt(calc.correctedEnergyWh)} × ${safetyFactor}) ÷ ${fmt(calc.effHsp, 2)}`, result: fmt(calc.peakWp), unit: "Wc" }),
-                    React.createElement(Formula, { label: "Nombre de panneaux", formula: "Np = Pc / Wc_unitaire \u2192 arrangement Ns \u00D7 Npar", sub: `= ${fmt(calc.peakWp)} ÷ ${panelWp} → ${calc.panelsSeries} série × ${calc.panelsParallel} parallèle`, result: calc.totalPanels, unit: "panneaux" }),
-                    React.createElement(Formula, { label: "Capacit\u00E9 de batterie requise", formula: "Cbat = (Ec' \u00D7 N) / (Usys \u00D7 DOD)", sub: `= (${fmt(calc.correctedEnergyWh)} × ${autonomyDays}) ÷ (${systemVoltage} × ${dod}%)`, result: fmt(calc.battCapTotalAh), unit: "Ah", accent: C.teal }),
-                    React.createElement(Formula, { label: "Nombre de batteries", formula: "Nbat = arrangement Ns \u00D7 Npar", sub: `Ns = Usys/Ubat = ${calc.battSeries} · Npar = Cbat/Cunitaire = ${calc.battParallel}`, result: calc.totalBatteries, unit: "batteries", accent: C.teal }),
-                    React.createElement(Formula, { label: "Courant du r\u00E9gulateur", formula: "Ireg = (Pc \u00D7 marge) / Usys", sub: `= (${fmt(calc.peakWp)} × ${regMargin}) ÷ ${systemVoltage}`, result: `${fmt(calc.regCurrentRaw, 1)} A calc. → ${calc.regulator} A normalisé`, unit: "", accent: C.teal }),
-                    React.createElement(Formula, { label: "Puissance de l'onduleur", formula: "Pond = Pmax_simultan\u00E9e \u00D7 marge", sub: `= ${fmt(calc.maxInstantW)} × ${inverterMargin}`, result: fmt(calc.inverterVA), unit: "VA" })),
-                React.createElement(Section, { n: "05", title: "Section des c\u00E2bles \u2014 formules & calculs", subtitle: "S = (2 \u00D7 L \u00D7 I) / (56 \u00D7 \u0394U), avec \u0394U = Usys \u00D7 chute admissible." },
-                    React.createElement("div", { className: "grid sm:grid-cols-3 gap-3 mb-3" },
-                        React.createElement(Field, { label: "Longueur panneaux \u2192 r\u00E9gulateur", hint: "m" },
-                            React.createElement(NumInput, { value: distPV, onChange: setDistPV })),
-                        React.createElement(Field, { label: "Longueur batterie \u2192 onduleur", hint: "m" },
-                            React.createElement(NumInput, { value: distBatt, onChange: setDistBatt })),
-                        React.createElement(Field, { label: "Chute de tension admissible" },
-                            React.createElement(NumInput, { value: dropPct, onChange: setDropPct, step: 0.5, suffix: "%" }))),
-                    React.createElement(Formula, { label: "C\u00E2ble PV \u2192 r\u00E9gulateur", formula: "S = (2 \u00D7 L \u00D7 I) / (56 \u00D7 \u0394U)", sub: `= (2 × ${distPV} × ${fmt(calc.currentPV, 1)}) ÷ (56 × ${fmt((systemVoltage * dropPct) / 100, 2)})`, result: `${fmt(calc.sectionPVraw, 2)} mm² calc. → ${calc.sectionPV} mm² normalisé`, unit: "" }),
-                    React.createElement(Formula, { label: "C\u00E2ble batterie \u2192 onduleur", formula: "S = (2 \u00D7 L \u00D7 I) / (56 \u00D7 \u0394U)", sub: `= (2 × ${distBatt} × ${fmt(calc.currentBatt, 1)}) ÷ (56 × ${fmt((systemVoltage * dropPct) / 100, 2)})`, result: `${fmt(calc.sectionBattraw, 2)} mm² calc. → ${calc.sectionBatt} mm² normalisé`, unit: "", accent: C.teal })),
-                React.createElement(Section, { n: "06", title: "Protections & s\u00E9curit\u00E9 de l'installation", subtitle: "Fusibles, disjoncteurs, sectionneurs, parafoudres et mise \u00E0 la terre \u2014 crit\u00E8re de choix, calcul et type recommand\u00E9 pour chaque organe.", accent: C.teal },
-                    React.createElement(ProtectionRow, { label: "Fusible de cha\u00EEne DC (coffret DC)", formula: calc.panelsParallel > 1 ? "If = 1.25 × Isc_unitaire" : null, sub: calc.panelsParallel > 1 ? `= 1.25 × ${panelIsc} A` : null, result: calc.panelsParallel > 1 ? calc.stringFuseStd : null, unit: calc.panelsParallel > 1 ? "A" : "", note: calc.panelsParallel > 1
-                            ? `Fusible type gPV (dédié DC photovoltaïque), un par chaîne — ${calc.panelsParallel} chaînes en parallèle. Ne pas utiliser un fusible AC (gG) : coupure d'arc DC insuffisante.`
-                            : "Une seule chaîne de panneaux (pas de parallèle) : fusible de chaîne non nécessaire, la protection est assurée par le sectionneur/disjoncteur DC général." }),
-                    React.createElement(ProtectionRow, { label: "Sectionneur / disjoncteur DC g\u00E9n\u00E9ral (champ PV \u2192 r\u00E9gulateur)", formula: "IDC = 1.25 \u00D7 Isc_total ; UDC \u2265 Voc_total \u00D7 coeff. froid", sub: `= 1.25 × (${panelIsc} × ${calc.panelsParallel}) = 1.25 × ${fmt(calc.iscTotalDC, 1)} A ; U ≥ ${panelVoc} × ${calc.panelsSeries} × ${vocColdFactor}`, result: `${calc.mainDCStd} A · tenue ≥ ${fmt(calc.vocStringTotal)} V`, unit: "", note: "Sectionneur-disjoncteur DC bipolaire avec pouvoir de coupure en charge c\u00F4t\u00E9 continu, polarit\u00E9s clairement rep\u00E9r\u00E9es (+/\u2212)." }),
-                    React.createElement(ProtectionRow, { label: "Disjoncteur DC \u2014 r\u00E9gulateur \u2192 batterie (charge)", formula: "I = 1.25 \u00D7 Icalibre r\u00E9gulateur", sub: `= 1.25 × ${calc.regulator} A`, result: calc.chargeBreakerStd, unit: "A", note: "Disjoncteur DC d\u00E9di\u00E9 (jamais un mod\u00E8le AC standard) \u2014 coupure de l'arc continu et respect de la polarit\u00E9." }),
-                    React.createElement(ProtectionRow, { label: "Disjoncteur + sectionneur DC \u2014 batterie \u2192 onduleur (d\u00E9charge)", formula: "I = 1.25 \u00D7 Ibatterie (c\u00F4t\u00E9 onduleur)", sub: `= 1.25 × ${fmt(calc.currentBatt, 1)} A`, result: calc.dischargeBreakerStd, unit: "A", note: "Sectionneur de proximit\u00E9 batterie obligatoire (coupure d'urgence manuelle), associ\u00E9 au disjoncteur DC de m\u00EAme calibre." }),
-                    React.createElement(ProtectionRow, { label: "Parafoudre DC (entre champ PV et r\u00E9gulateur)", formula: "Uc \u2265 1.2 \u00D7 Voc_total", sub: `≥ 1.2 × ${fmt(calc.vocStringTotal)} V`, result: `${calc.spdType}`, unit: "", note: `Parafoudre ${calc.spdType} sur chaque polarité + terre, avec voyant de défaut. ${highLightningRisk ? "Zone à risque de foudre élevé → Type 1+2 conseillé." : "Risque standard → Type 2 suffisant ; passer en Type 1+2 si ligne aérienne longue ou zone kéraunique élevée."}` }),
-                    React.createElement(ProtectionRow, { label: "Disjoncteur AC (sortie onduleur)", formula: "IAC = Pond / U (mono) ou Pond / (\u221A3\u00D7U) (tri) ; Idisj = 1.25 \u00D7 IAC", sub: `IAC = ${fmt(calc.iAC, 1)} A (${acPhase === "tri" ? "400V triphasé" : "230V monophasé"}) → 1.25 × ${fmt(calc.iAC, 1)}`, result: calc.acBreakerStd, unit: "A", note: "Disjoncteur courbe C (usage g\u00E9n\u00E9ral onduleur), associ\u00E9 \u00E0 un diff\u00E9rentiel 30 mA de type A (ou type B si sp\u00E9cifi\u00E9 par le fabricant de l'onduleur \u2014 courants de fuite continus possibles)." }),
-                    React.createElement(ProtectionRow, { label: "Interrupteur-sectionneur g\u00E9n\u00E9ral AC", formula: "I \u2265 Idisjoncteur AC", sub: `≥ ${calc.acBreakerStd} A`, result: calc.acBreakerStd, unit: "A", note: "Sectionneur visible et cadenassable, bipolaire (mono) ou t\u00E9trapolaire (triphas\u00E9), pouvoir de coupure en charge \u2014 coupure g\u00E9n\u00E9rale avant intervention." }),
-                    React.createElement(ProtectionRow, { label: "Parafoudre AC (avant les charges)", formula: "Uc \u2265 1.1 \u00D7 Un", sub: `≥ 1.1 × ${calc.acLineVoltage} V`, result: `${calc.spdType}`, unit: "", note: "Parafoudre AC en t\u00EAte d'installation, associ\u00E9 \u00E0 la mise \u00E0 la terre \u2014 prot\u00E8ge l'onduleur et les charges sensibles." }),
-                    React.createElement(ProtectionRow, { label: "Mise \u00E0 la terre", formula: "S(terre) : = S(actif) si \u226416mm\u00B2 \u00B7 =16mm\u00B2 si 16\u201335mm\u00B2 \u00B7 =S(actif)/2 si >35mm\u00B2", sub: `Section active de référence = ${Math.max(calc.sectionPV, calc.sectionBatt)} mm²`, result: `${calc.earthSectionStd} mm² · résistance de terre visée ≤ 10 Ω`, unit: "", note: "Piquet(s) de terre ou boucle \u00E0 fond de fouille, conducteur cuivre (nu ou vert-jaune prot\u00E9g\u00E9), liaison \u00E9quipotentielle des masses m\u00E9talliques (ch\u00E2ssis panneaux, coffrets DC/AC, chemin de c\u00E2bles)." }),
-                    React.createElement(ProtectionRow, { label: "Coffrets de protection DC & AC", note: "Coffret DC : IP65 mini, fusibles/disjoncteurs DC + parafoudre DC + bornes de raccordement des cha\u00EEnes. Coffret AC : IP54/65, disjoncteur diff\u00E9rentiel + parafoudre AC + sectionneur g\u00E9n\u00E9ral \u2014 tous deux en amont/aval de l'onduleur, accessibles et rep\u00E9r\u00E9s." })),
+                (service === "photovoltaique" || service === "pompage") && (React.createElement(React.Fragment, null,
+                    React.createElement(Section, { n: "04", title: "R\u00E9sultats d\u00E9taill\u00E9s \u2014 formules & calculs", subtitle: "Chaque valeur affiche la formule utilis\u00E9e et le calcul avec tes propres chiffres.", accent: C.teal },
+                        React.createElement("div", { className: "flex items-center gap-1.5 mb-1", style: { color: C.amber } },
+                            React.createElement(Unlock, { size: 13 }),
+                            React.createElement("span", { style: { fontFamily: SANS }, className: "text-xs" }, "Contenu d\u00E9bloqu\u00E9")),
+                        React.createElement(Formula, { label: "\u00C9nergie journali\u00E8re corrig\u00E9e", formula: "Ec' = Ec / \u03B7", sub: `= ${fmt(calc.dailyEnergyWh)} Wh ÷ ${efficiency}%`, result: fmt(calc.correctedEnergyWh), unit: "Wh/j" }),
+                        React.createElement(Formula, { label: "Irradiation effective retenue", formula: "HSPeff = HSP \u00D7 correction", sub: `= ${hsp} × ${tiltCorrection}%`, result: fmt(calc.effHsp, 2), unit: "kWh/m\u00B2/j", accent: C.teal }),
+                        React.createElement(Formula, { label: "Puissance cr\u00EAte du champ photovolta\u00EFque", formula: "Pc = (Ec' \u00D7 Ks) / HSPeff", sub: `= (${fmt(calc.correctedEnergyWh)} × ${safetyFactor}) ÷ ${fmt(calc.effHsp, 2)}`, result: fmt(calc.peakWp), unit: "Wc" }),
+                        React.createElement(Formula, { label: "Nombre de panneaux", formula: "Np = Pc / Wc_unitaire \u2192 arrangement Ns \u00D7 Npar", sub: `= ${fmt(calc.peakWp)} ÷ ${panelWp} → ${calc.panelsSeries} série × ${calc.panelsParallel} parallèle`, result: calc.totalPanels, unit: "panneaux" }),
+                        React.createElement(Formula, { label: "Capacit\u00E9 de batterie requise", formula: "Cbat = (Ec' \u00D7 N) / (Usys \u00D7 DOD)", sub: `= (${fmt(calc.correctedEnergyWh)} × ${autonomyDays}) ÷ (${systemVoltage} × ${dod}%)`, result: fmt(calc.battCapTotalAh), unit: "Ah", accent: C.teal }),
+                        React.createElement(Formula, { label: "Nombre de batteries", formula: "Nbat = arrangement Ns \u00D7 Npar", sub: `Ns = Usys/Ubat = ${calc.battSeries} · Npar = Cbat/Cunitaire = ${calc.battParallel}`, result: calc.totalBatteries, unit: "batteries", accent: C.teal }),
+                        React.createElement(Formula, { label: "Courant du r\u00E9gulateur", formula: "Ireg = (Pc \u00D7 marge) / Usys", sub: `= (${fmt(calc.peakWp)} × ${regMargin}) ÷ ${systemVoltage}`, result: `${fmt(calc.regCurrentRaw, 1)} A calc. → ${calc.regulator} A normalisé`, unit: "", accent: C.teal }),
+                        React.createElement(Formula, { label: "Puissance de l'onduleur", formula: "Pond = Pmax_simultan\u00E9e \u00D7 marge", sub: `= ${fmt(calc.maxInstantW)} × ${inverterMargin}`, result: fmt(calc.inverterVA), unit: "VA" })),
+                    React.createElement(Section, { n: "05", title: "Section des c\u00E2bles \u2014 formules & calculs", subtitle: "S = (2 \u00D7 L \u00D7 I) / (56 \u00D7 \u0394U), avec \u0394U = Usys \u00D7 chute admissible." },
+                        React.createElement("div", { className: "grid sm:grid-cols-3 gap-3 mb-3" },
+                            React.createElement(Field, { label: "Longueur panneaux \u2192 r\u00E9gulateur", hint: "m" },
+                                React.createElement(NumInput, { value: distPV, onChange: setDistPV })),
+                            React.createElement(Field, { label: "Longueur batterie \u2192 onduleur", hint: "m" },
+                                React.createElement(NumInput, { value: distBatt, onChange: setDistBatt })),
+                            React.createElement(Field, { label: "Chute de tension admissible" },
+                                React.createElement(NumInput, { value: dropPct, onChange: setDropPct, step: 0.5, suffix: "%" }))),
+                        React.createElement(Formula, { label: "C\u00E2ble PV \u2192 r\u00E9gulateur", formula: "S = (2 \u00D7 L \u00D7 I) / (56 \u00D7 \u0394U)", sub: `= (2 × ${distPV} × ${fmt(calc.currentPV, 1)}) ÷ (56 × ${fmt((systemVoltage * dropPct) / 100, 2)})`, result: `${fmt(calc.sectionPVraw, 2)} mm² calc. → ${calc.sectionPV} mm² normalisé`, unit: "" }),
+                        React.createElement(Formula, { label: "C\u00E2ble batterie \u2192 onduleur", formula: "S = (2 \u00D7 L \u00D7 I) / (56 \u00D7 \u0394U)", sub: `= (2 × ${distBatt} × ${fmt(calc.currentBatt, 1)}) ÷ (56 × ${fmt((systemVoltage * dropPct) / 100, 2)})`, result: `${fmt(calc.sectionBattraw, 2)} mm² calc. → ${calc.sectionBatt} mm² normalisé`, unit: "", accent: C.teal })),
+                    React.createElement(Section, { n: "06", title: "Protections & s\u00E9curit\u00E9 de l'installation", subtitle: "Fusibles, disjoncteurs, sectionneurs, parafoudres et mise \u00E0 la terre \u2014 crit\u00E8re de choix, calcul et type recommand\u00E9 pour chaque organe.", accent: C.teal },
+                        React.createElement(ProtectionRow, { label: "Fusible de cha\u00EEne DC (coffret DC)", formula: calc.panelsParallel > 1 ? "If = 1.25 × Isc_unitaire" : null, sub: calc.panelsParallel > 1 ? `= 1.25 × ${panelIsc} A` : null, result: calc.panelsParallel > 1 ? calc.stringFuseStd : null, unit: calc.panelsParallel > 1 ? "A" : "", note: calc.panelsParallel > 1
+                                ? `Fusible type gPV (dédié DC photovoltaïque), un par chaîne — ${calc.panelsParallel} chaînes en parallèle. Ne pas utiliser un fusible AC (gG) : coupure d'arc DC insuffisante.`
+                                : "Une seule chaîne de panneaux (pas de parallèle) : fusible de chaîne non nécessaire, la protection est assurée par le sectionneur/disjoncteur DC général." }),
+                        React.createElement(ProtectionRow, { label: "Sectionneur / disjoncteur DC g\u00E9n\u00E9ral (champ PV \u2192 r\u00E9gulateur)", formula: "IDC = 1.25 \u00D7 Isc_total ; UDC \u2265 Voc_total \u00D7 coeff. froid", sub: `= 1.25 × (${panelIsc} × ${calc.panelsParallel}) = 1.25 × ${fmt(calc.iscTotalDC, 1)} A ; U ≥ ${panelVoc} × ${calc.panelsSeries} × ${vocColdFactor}`, result: `${calc.mainDCStd} A · tenue ≥ ${fmt(calc.vocStringTotal)} V`, unit: "", note: "Sectionneur-disjoncteur DC bipolaire avec pouvoir de coupure en charge c\u00F4t\u00E9 continu, polarit\u00E9s clairement rep\u00E9r\u00E9es (+/\u2212)." }),
+                        React.createElement(ProtectionRow, { label: "Disjoncteur DC \u2014 r\u00E9gulateur \u2192 batterie (charge)", formula: "I = 1.25 \u00D7 Icalibre r\u00E9gulateur", sub: `= 1.25 × ${calc.regulator} A`, result: calc.chargeBreakerStd, unit: "A", note: "Disjoncteur DC d\u00E9di\u00E9 (jamais un mod\u00E8le AC standard) \u2014 coupure de l'arc continu et respect de la polarit\u00E9." }),
+                        React.createElement(ProtectionRow, { label: "Disjoncteur + sectionneur DC \u2014 batterie \u2192 onduleur (d\u00E9charge)", formula: "I = 1.25 \u00D7 Ibatterie (c\u00F4t\u00E9 onduleur)", sub: `= 1.25 × ${fmt(calc.currentBatt, 1)} A`, result: calc.dischargeBreakerStd, unit: "A", note: "Sectionneur de proximit\u00E9 batterie obligatoire (coupure d'urgence manuelle), associ\u00E9 au disjoncteur DC de m\u00EAme calibre." }),
+                        React.createElement(ProtectionRow, { label: "Parafoudre DC (entre champ PV et r\u00E9gulateur)", formula: "Uc \u2265 1.2 \u00D7 Voc_total", sub: `≥ 1.2 × ${fmt(calc.vocStringTotal)} V`, result: `${calc.spdType}`, unit: "", note: `Parafoudre ${calc.spdType} sur chaque polarité + terre, avec voyant de défaut. ${highLightningRisk ? "Zone à risque de foudre élevé → Type 1+2 conseillé." : "Risque standard → Type 2 suffisant ; passer en Type 1+2 si ligne aérienne longue ou zone kéraunique élevée."}` }),
+                        React.createElement(ProtectionRow, { label: "Disjoncteur AC (sortie onduleur)", formula: "IAC = Pond / U (mono) ou Pond / (\u221A3\u00D7U) (tri) ; Idisj = 1.25 \u00D7 IAC", sub: `IAC = ${fmt(calc.iAC, 1)} A (${acPhase === "tri" ? "400V triphasé" : "230V monophasé"}) → 1.25 × ${fmt(calc.iAC, 1)}`, result: calc.acBreakerStd, unit: "A", note: "Disjoncteur courbe C (usage g\u00E9n\u00E9ral onduleur), associ\u00E9 \u00E0 un diff\u00E9rentiel 30 mA de type A (ou type B si sp\u00E9cifi\u00E9 par le fabricant de l'onduleur \u2014 courants de fuite continus possibles)." }),
+                        React.createElement(ProtectionRow, { label: "Interrupteur-sectionneur g\u00E9n\u00E9ral AC", formula: "I \u2265 Idisjoncteur AC", sub: `≥ ${calc.acBreakerStd} A`, result: calc.acBreakerStd, unit: "A", note: "Sectionneur visible et cadenassable, bipolaire (mono) ou t\u00E9trapolaire (triphas\u00E9), pouvoir de coupure en charge \u2014 coupure g\u00E9n\u00E9rale avant intervention." }),
+                        React.createElement(ProtectionRow, { label: "Parafoudre AC (avant les charges)", formula: "Uc \u2265 1.1 \u00D7 Un", sub: `≥ 1.1 × ${calc.acLineVoltage} V`, result: `${calc.spdType}`, unit: "", note: "Parafoudre AC en t\u00EAte d'installation, associ\u00E9 \u00E0 la mise \u00E0 la terre \u2014 prot\u00E8ge l'onduleur et les charges sensibles." }),
+                        React.createElement(ProtectionRow, { label: "Mise \u00E0 la terre", formula: "S(terre) : = S(actif) si \u226416mm\u00B2 \u00B7 =16mm\u00B2 si 16\u201335mm\u00B2 \u00B7 =S(actif)/2 si >35mm\u00B2", sub: `Section active de référence = ${Math.max(calc.sectionPV, calc.sectionBatt)} mm²`, result: `${calc.earthSectionStd} mm² · résistance de terre visée ≤ 10 Ω`, unit: "", note: "Piquet(s) de terre ou boucle \u00E0 fond de fouille, conducteur cuivre (nu ou vert-jaune prot\u00E9g\u00E9), liaison \u00E9quipotentielle des masses m\u00E9talliques (ch\u00E2ssis panneaux, coffrets DC/AC, chemin de c\u00E2bles)." }),
+                        React.createElement(ProtectionRow, { label: "Coffrets de protection DC & AC", note: "Coffret DC : IP65 mini, fusibles/disjoncteurs DC + parafoudre DC + bornes de raccordement des cha\u00EEnes. Coffret AC : IP54/65, disjoncteur diff\u00E9rentiel + parafoudre AC + sectionneur g\u00E9n\u00E9ral \u2014 tous deux en amont/aval de l'onduleur, accessibles et rep\u00E9r\u00E9s." })))),
+                service === "climatisation" && (React.createElement(Section, { n: "04", title: "R\u00E9sultats \u2014 climatisation", subtitle: "Puissance frigorifique n\u00E9cessaire par pi\u00E8ce, \u00E0 partir de la superficie et (en mode d\u00E9taill\u00E9) de l'isolation, l'ensoleillement, l'occupation et les appareils.", accent: C.teal }, acRooms.map((r) => {
+                    const res = computeRoomBtu(r);
+                    return (React.createElement("div", { key: r.id, className: "py-2", style: { borderTop: `1px dashed ${C.border}` } },
+                        React.createElement("div", { style: { color: C.text, fontFamily: SANS }, className: "text-xs font-medium mb-1" }, r.name),
+                        React.createElement("div", { style: { color: C.muted, fontFamily: MONO }, className: "text-[11px] leading-relaxed" }, r.mode === "rapide" ? `BTU = Surface × 600 = ${r.surface} × 600` : `BTU = Surface × (Hauteur/2.5) × 600 × isolation × soleil + occupants + appareils`),
+                        React.createElement("div", { style: { color: C.amber, fontFamily: MONO }, className: "text-sm font-bold mt-0.5" },
+                            "= ",
+                            fmt(res.btu),
+                            " BTU/h \u2192 Climatiseur ",
+                            res.stdBtu.toLocaleString("fr-FR"),
+                            " BTU/h (",
+                            res.cv,
+                            ")")));
+                }))),
+                service === "cameras" && (React.createElement(Section, { n: "04", title: "R\u00E9sultats \u2014 stockage vid\u00E9o", subtitle: "Le d\u00E9bit total des cam\u00E9ras et la dur\u00E9e d'enregistrement souhait\u00E9e d\u00E9terminent la capacit\u00E9 de stockage n\u00E9cessaire.", accent: C.teal },
+                    React.createElement(Formula, { label: "Volume de donn\u00E9es journalier", formula: "Stockage(Go) = (Nb cam\u00E9ras \u00D7 d\u00E9bit(Mbps) \u00D7 3600 \u00D7 24 \u00D7 jours) / (8 \u00D7 1024)", sub: `= (${camCalc.totalCameras} × ${bitrateMbps} × 86400 × ${recordingDays}) / 8192`, result: fmt(camCalc.storageTB, 2), unit: "To" }),
+                    React.createElement(ProtectionRow, { label: "Enregistreur (NVR/DVR)", result: `${camCalc.nvrChannels} voies`, unit: "", note: "Nombre de voies standard imm\u00E9diatement sup\u00E9rieur au nombre de cam\u00E9ras, pour permettre une extension future." }),
+                    React.createElement(ProtectionRow, { label: "Disque dur de stockage", result: `${camCalc.recommendedDiskTB} To`, unit: "", note: "Disque de surveillance (type WD Purple / Seagate SkyHawk), taille standard imm\u00E9diatement sup\u00E9rieure au besoin calcul\u00E9." }))),
                 React.createElement(Section, { n: "07", title: "Devis quantitatif et estimatif (DQE)", subtitle: "Quantit\u00E9s calcul\u00E9es automatiquement \u00E0 partir du dimensionnement. Prix par d\u00E9faut modifiables.", accent: C.amber },
                     React.createElement("div", { className: "flex items-center justify-between mb-3 gap-3 flex-wrap" },
                         React.createElement("span", { style: { color: C.muted, fontFamily: SANS }, className: "text-xs" }, "Prix unitaires \u00E9ditables ci-dessous."),
