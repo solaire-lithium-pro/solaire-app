@@ -1,4 +1,4 @@
-const CACHE = "solar-sizer-v8";
+const CACHE = "solar-sizer-v9";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (event) => {
