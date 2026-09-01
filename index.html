@@ -810,6 +810,8 @@ function SolarSizer() {
             setPdfLoading(false);
         }
     };
+    // Service actif (module commun à plusieurs métiers de Volta Ingénierie)
+    const [service, setService] = (0, React.useState)("photovoltaique");
     // Charges
     const [loads, setLoads] = (0, React.useState)([
         { id: 1, name: "Ampoule LED", power: 10, qty: 4, hours: 5 },
@@ -818,6 +820,15 @@ function SolarSizer() {
         { id: 4, name: "Ordinateur portable", power: 65, qty: 1, hours: 3 },
     ]);
     const [nextId, setNextId] = (0, React.useState)(5);
+    // Pompage solaire
+    const [pumpWaterM3, setPumpWaterM3] = (0, React.useState)(5);
+    const [pumpSourceType, setPumpSourceType] = (0, React.useState)("forage");
+    const [pumpGeoHeight, setPumpGeoHeight] = (0, React.useState)(25);
+    const [pumpRefoulHeight, setPumpRefoulHeight] = (0, React.useState)(5);
+    const [pumpLossPct, setPumpLossPct] = (0, React.useState)(10);
+    const [pumpEfficiency, setPumpEfficiency] = (0, React.useState)(55);
+    const [pumpDriveEfficiency, setPumpDriveEfficiency] = (0, React.useState)(92);
+    const [pumpSystemType, setPumpSystemType] = (0, React.useState)("filSoleil");
     // Localisation & irradiation
     const [continent, setContinent] = (0, React.useState)("Afrique");
     const [country, setCountry] = (0, React.useState)("Bénin");
@@ -845,6 +856,9 @@ function SolarSizer() {
     const [vocColdFactor, setVocColdFactor] = (0, React.useState)(1.15);
     const [acPhase, setAcPhase] = (0, React.useState)("mono");
     const [highLightningRisk, setHighLightningRisk] = (0, React.useState)(false);
+    // Sources d'alimentation & secours (module commun, réutilisable pour tous les services)
+    const [sourceSBEE, setSourceSBEE] = (0, React.useState)(false);
+    const [sourceGroupe, setSourceGroupe] = (0, React.useState)(false);
     // Devis quantitatif et estimatif (DQE)
     const [devisCurrency, setDevisCurrency] = (0, React.useState)("XOF");
     const [devisPrices, setDevisPrices] = (0, React.useState)({
@@ -852,6 +866,7 @@ function SolarSizer() {
         cablePV: 1200, cableBatt: 1500, stringFuse: 3000, mainDC: 15000,
         chargeBreaker: 12000, dischargeBreaker: 12000, spdDC: 20000,
         acBreaker: 12000, acSwitch: 15000, spdAC: 15000, earthing: 25000, coffrets: 20000,
+        ats: 65000, groupeBreaker: 18000, sbeeBreaker: 15000, pump: 180000,
     });
     const updateDevisPrice = (id, displayVal) => setDevisPrices((p) => ({ ...p, [id]: fromDisplayAmount(displayVal, devisCurrency) }));
     const [laborCost, setLaborCost] = (0, React.useState)(100000);
@@ -882,8 +897,24 @@ function SolarSizer() {
     const recommendedTilt = Math.round(Math.abs(latitude));
     const orientation = latitude >= 0 ? "Sud" : "Nord";
     const calc = (0, React.useMemo)(() => {
-        const dailyEnergyWh = loads.reduce((s, l) => s + l.power * l.qty * l.hours, 0);
-        const maxInstantW = loads.reduce((s, l) => s + l.power * l.qty, 0);
+        const needsBattery = !(service === "pompage" && pumpSystemType === "filSoleil");
+        let dailyEnergyWh, maxInstantW;
+        let hmt = 0, hydraulicPowerAvgW = 0, hydraulicEnergyWh = 0, pumpElecPowerW = 0;
+        if (service === "pompage") {
+            hmt = pumpGeoHeight + pumpRefoulHeight + (pumpGeoHeight + pumpRefoulHeight) * (pumpLossPct / 100);
+            // Énergie hydraulique (Wh) = rho*g/3600 * Volume(m3) * HMT(m) ; rho*g/3600 = 2.7247
+            hydraulicEnergyWh = 2.7247 * pumpWaterM3 * hmt;
+            const globalEff = (pumpEfficiency / 100 || 1) * (pumpDriveEfficiency / 100 || 1);
+            dailyEnergyWh = globalEff > 0 ? hydraulicEnergyWh / globalEff : 0;
+            // Puissance électrique moyenne nécessaire si le pompage s'étale sur les heures utiles (HSP)
+            pumpElecPowerW = hsp > 0 ? dailyEnergyWh / hsp : 0;
+            hydraulicPowerAvgW = hsp > 0 ? hydraulicEnergyWh / hsp : 0;
+            maxInstantW = pumpElecPowerW * 1.25; // marge de démarrage pompe
+        }
+        else {
+            dailyEnergyWh = loads.reduce((s, l) => s + l.power * l.qty * l.hours, 0);
+            maxInstantW = loads.reduce((s, l) => s + l.power * l.qty, 0);
+        }
         const correctedEnergyWh = dailyEnergyWh / (efficiency / 100 || 1);
         const effHsp = hsp * (tiltCorrection / 100);
         const peakWp = effHsp > 0 ? (correctedEnergyWh * safetyFactor) / effHsp : 0;
@@ -891,10 +922,10 @@ function SolarSizer() {
         const panelsSeries = panelVoltage > 0 ? Math.max(1, Math.ceil(systemVoltage / panelVoltage)) : 1;
         const panelsParallel = Math.max(1, Math.ceil(numPanels / panelsSeries));
         const totalPanels = panelsSeries * panelsParallel;
-        const battCapTotalAh = systemVoltage > 0 && dod > 0 ? (correctedEnergyWh * autonomyDays) / (systemVoltage * (dod / 100)) : 0;
+        const battCapTotalAh = needsBattery && systemVoltage > 0 && dod > 0 ? (correctedEnergyWh * autonomyDays) / (systemVoltage * (dod / 100)) : 0;
         const battSeries = batteryVoltage > 0 ? Math.max(1, Math.ceil(systemVoltage / batteryVoltage)) : 1;
-        const battParallel = batteryAh > 0 ? Math.max(1, Math.ceil(battCapTotalAh / batteryAh)) : 1;
-        const totalBatteries = battSeries * battParallel;
+        const battParallel = needsBattery && batteryAh > 0 ? Math.max(1, Math.ceil(battCapTotalAh / batteryAh)) : 0;
+        const totalBatteries = needsBattery ? battSeries * battParallel : 0;
         const regCurrentRaw = systemVoltage > 0 ? (peakWp * regMargin) / systemVoltage : 0;
         const regulator = pickStandard(REGULATOR_SIZES, regCurrentRaw);
         const inverterVA = maxInstantW * inverterMargin;
@@ -914,7 +945,7 @@ function SolarSizer() {
         const mainDCStd = pickStandard(BREAKER_SIZES, mainDCCalc);
         const chargeBreakerCalc = 1.25 * regulator;
         const chargeBreakerStd = pickStandard(BREAKER_SIZES, chargeBreakerCalc);
-        const dischargeBreakerCalc = 1.25 * currentBatt;
+        const dischargeBreakerCalc = needsBattery ? 1.25 * currentBatt : 0;
         const dischargeBreakerStd = pickStandard(BREAKER_SIZES, dischargeBreakerCalc);
         const acLineVoltage = acPhase === "tri" ? 400 : 230;
         const iAC = acPhase === "tri" ? inverterVA / (Math.sqrt(3) * 400) : inverterVA / 230;
@@ -927,15 +958,17 @@ function SolarSizer() {
         return {
             dailyEnergyWh, maxInstantW, correctedEnergyWh, effHsp, peakWp,
             numPanels, panelsSeries, panelsParallel, totalPanels,
-            battCapTotalAh, battSeries, battParallel, totalBatteries,
+            battCapTotalAh, battSeries, battParallel, totalBatteries, needsBattery,
             regCurrentRaw, regulator, inverterVA, currentPV, currentBatt,
             sectionPV, sectionPVraw, sectionBatt, sectionBattraw,
             vocStringTotal, iscTotalDC, stringFuseCalc, stringFuseStd,
             mainDCCalc, mainDCStd, chargeBreakerCalc, chargeBreakerStd,
             dischargeBreakerCalc, dischargeBreakerStd, acLineVoltage, iAC, acBreakerCalc, acBreakerStd,
             earthSectionCalc, earthSectionStd, spdType,
+            hmt, hydraulicPowerAvgW, hydraulicEnergyWh, pumpElecPowerW,
         };
-    }, [loads, systemVoltage, autonomyDays, dod, efficiency, hsp, tiltCorrection, safetyFactor, panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin, distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk]);
+    }, [service, loads, pumpWaterM3, pumpSourceType, pumpGeoHeight, pumpRefoulHeight, pumpLossPct, pumpEfficiency, pumpDriveEfficiency, pumpSystemType,
+        systemVoltage, autonomyDays, dod, efficiency, hsp, tiltCorrection, safetyFactor, panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin, distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk]);
     const devisRows = (0, React.useMemo)(() => {
         const rows = [
             { id: "panels", label: `Panneau solaire ${panelWp} Wc`, qty: calc.totalPanels, unit: "u" },
@@ -943,11 +976,11 @@ function SolarSizer() {
             { id: "regulator", label: `Régulateur de charge ${calc.regulator} A`, qty: 1, unit: "u" },
             { id: "inverter", label: `Onduleur ${fmt(calc.inverterVA)} VA`, qty: 1, unit: "u" },
             { id: "cablePV", label: `Câble PV → régulateur (${calc.sectionPV} mm²)`, qty: distPV * 2, unit: "m" },
-            { id: "cableBatt", label: `Câble batterie → onduleur (${calc.sectionBatt} mm²)`, qty: distBatt * 2, unit: "m" },
+            { id: "cableBatt", label: `Câble batterie → onduleur (${calc.sectionBatt} mm²)`, qty: calc.needsBattery ? distBatt * 2 : 0, unit: "m" },
             { id: "stringFuse", label: `Fusible gPV ${calc.stringFuseStd} A`, qty: calc.panelsParallel > 1 ? calc.panelsParallel : 0, unit: "u" },
             { id: "mainDC", label: `Sectionneur/disjoncteur DC général ${calc.mainDCStd} A`, qty: 1, unit: "u" },
             { id: "chargeBreaker", label: `Disjoncteur DC charge ${calc.chargeBreakerStd} A`, qty: 1, unit: "u" },
-            { id: "dischargeBreaker", label: `Disjoncteur/sectionneur DC décharge ${calc.dischargeBreakerStd} A`, qty: 1, unit: "u" },
+            { id: "dischargeBreaker", label: `Disjoncteur/sectionneur DC décharge ${calc.dischargeBreakerStd} A`, qty: calc.needsBattery ? 1 : 0, unit: "u" },
             { id: "spdDC", label: `Parafoudre DC ${calc.spdType}`, qty: 1, unit: "u" },
             { id: "acBreaker", label: `Disjoncteur AC ${calc.acBreakerStd} A`, qty: 1, unit: "u" },
             { id: "acSwitch", label: `Interrupteur-sectionneur AC général ${calc.acBreakerStd} A`, qty: 1, unit: "u" },
@@ -955,24 +988,36 @@ function SolarSizer() {
             { id: "earthing", label: `Mise à la terre (${calc.earthSectionStd} mm²)`, qty: 1, unit: "forfait" },
             { id: "coffrets", label: "Coffrets DC / AC", qty: 2, unit: "u" },
         ];
+        if (service === "pompage") {
+            rows.push({ id: "pump", label: `Motopompe solaire (${fmt(calc.pumpElecPowerW)} W électrique requis)`, qty: 1, unit: "u" });
+        }
+        const nSources = 1 + (sourceSBEE ? 1 : 0) + (sourceGroupe ? 1 : 0);
+        if (nSources >= 2) {
+            rows.push({ id: "ats", label: `Inverseur de source (ATS) ${nSources} voies, priorité solaire`, qty: 1, unit: "u" });
+            if (sourceGroupe)
+                rows.push({ id: "groupeBreaker", label: "Disjoncteur + prise attente groupe électrogène", qty: 1, unit: "u" });
+            if (sourceSBEE)
+                rows.push({ id: "sbeeBreaker", label: "Disjoncteur d'arrivée réseau SBEE", qty: 1, unit: "u" });
+        }
         return rows
             .filter((r) => r.qty > 0)
             .map((r) => {
             const priceXOF = devisPrices[r.id] || 0;
             return { ...r, priceXOF, totalXOF: r.qty * priceXOF };
         });
-    }, [calc, devisPrices, distPV, distBatt, panelWp, batteryAh, batteryVoltage]);
+    }, [calc, devisPrices, distPV, distBatt, panelWp, batteryAh, batteryVoltage, sourceSBEE, sourceGroupe, service]);
     const extraRowsComputed = extraItems.map((it) => ({ ...it, totalXOF: it.qty * it.price }));
     const devisMaterialTotalXOF = devisRows.reduce((s, r) => s + r.totalXOF, 0) + extraRowsComputed.reduce((s, r) => s + r.totalXOF, 0);
     const devisGrandTotalXOF = devisMaterialTotalXOF + laborCost;
     // Sauvegarde locale (persistance entre les ouvertures de l'app sur le téléphone)
-    const STORAGE_KEY = "solar-sizer-data-v2";
+    const STORAGE_KEY = "solar-sizer-data-v3";
     const didLoad = React.useRef(false);
     React.useEffect(() => {
         try {
             const raw = localStorage.getItem(STORAGE_KEY);
             if (raw) {
                 const s = JSON.parse(raw);
+                if (s.service !== undefined) setService(s.service);
                 if (s.brand !== undefined) setBrand(s.brand);
                 if (s.purchaseLink !== undefined) setPurchaseLink(s.purchaseLink);
                 if (s.logo !== undefined) setLogo(s.logo);
@@ -982,6 +1027,16 @@ function SolarSizer() {
                 if (s.accessCode !== undefined) setAccessCode(s.accessCode);
                 if (s.loads !== undefined) setLoads(s.loads);
                 if (s.nextId !== undefined) setNextId(s.nextId);
+                if (s.pumpWaterM3 !== undefined) setPumpWaterM3(s.pumpWaterM3);
+                if (s.pumpSourceType !== undefined) setPumpSourceType(s.pumpSourceType);
+                if (s.pumpGeoHeight !== undefined) setPumpGeoHeight(s.pumpGeoHeight);
+                if (s.pumpRefoulHeight !== undefined) setPumpRefoulHeight(s.pumpRefoulHeight);
+                if (s.pumpLossPct !== undefined) setPumpLossPct(s.pumpLossPct);
+                if (s.pumpEfficiency !== undefined) setPumpEfficiency(s.pumpEfficiency);
+                if (s.pumpDriveEfficiency !== undefined) setPumpDriveEfficiency(s.pumpDriveEfficiency);
+                if (s.pumpSystemType !== undefined) setPumpSystemType(s.pumpSystemType);
+                if (s.sourceSBEE !== undefined) setSourceSBEE(s.sourceSBEE);
+                if (s.sourceGroupe !== undefined) setSourceGroupe(s.sourceGroupe);
                 if (s.continent !== undefined) setContinent(s.continent);
                 if (s.country !== undefined) setCountry(s.country);
                 if (s.hsp !== undefined) setHsp(s.hsp);
@@ -1019,8 +1074,10 @@ function SolarSizer() {
     React.useEffect(() => {
         if (!didLoad.current) return;
         const snapshot = {
-            brand, purchaseLink, logo, clientName, projectAddress, paywallEnabled, accessCode,
-            loads, nextId, continent, country, hsp, latitude, tiltCorrection,
+            service, brand, purchaseLink, logo, clientName, projectAddress, paywallEnabled, accessCode,
+            loads, nextId, pumpWaterM3, pumpSourceType, pumpGeoHeight, pumpRefoulHeight, pumpLossPct, pumpEfficiency, pumpDriveEfficiency, pumpSystemType,
+            sourceSBEE, sourceGroupe,
+            continent, country, hsp, latitude, tiltCorrection,
             systemVoltage, autonomyDays, dod, efficiency, safetyFactor,
             panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin,
             distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk,
@@ -1030,8 +1087,10 @@ function SolarSizer() {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
         }
         catch (e) { /* quota ou logo trop lourd */ }
-    }, [brand, purchaseLink, logo, clientName, projectAddress, paywallEnabled, accessCode,
-        loads, nextId, continent, country, hsp, latitude, tiltCorrection,
+    }, [service, brand, purchaseLink, logo, clientName, projectAddress, paywallEnabled, accessCode,
+        loads, nextId, pumpWaterM3, pumpSourceType, pumpGeoHeight, pumpRefoulHeight, pumpLossPct, pumpEfficiency, pumpDriveEfficiency, pumpSystemType,
+        sourceSBEE, sourceGroupe,
+        continent, country, hsp, latitude, tiltCorrection,
         systemVoltage, autonomyDays, dod, efficiency, safetyFactor,
         panelWp, panelVoltage, batteryAh, batteryVoltage, inverterMargin, regMargin,
         distPV, distBatt, dropPct, panelIsc, panelVoc, vocColdFactor, acPhase, highLightningRisk,
@@ -1057,8 +1116,13 @@ function SolarSizer() {
                 React.createElement("div", { style: { color: C.amber, fontFamily: MONO }, className: "text-[11px] uppercase tracking-[0.2em] mb-1" },
                     brand,
                     " \u00B7 Outil d'ing\u00E9nierie"),
-                React.createElement("h1", { style: { color: C.text }, className: "text-2xl font-bold tracking-tight" }, "Dimensionnement Solaire"),
-                React.createElement("p", { style: { color: C.muted }, className: "text-sm mt-1" }, "Valable pour n'importe quel pays et n'importe quelle charge. Choisis ta localisation, renseigne tes appareils : chaque r\u00E9sultat affiche sa formule et son calcul.")),
+                React.createElement("h1", { style: { color: C.text }, className: "text-2xl font-bold tracking-tight" }, service === "pompage" ? "Dimensionnement Pompage Solaire" : "Dimensionnement Solaire"),
+                React.createElement("p", { style: { color: C.muted }, className: "text-sm mt-1" }, service === "pompage"
+                    ? "Valable pour n'importe quel pays, n'importe quel forage ou réserve. Renseigne le besoin en eau : chaque résultat affiche sa formule et son calcul."
+                    : "Valable pour n'importe quel pays et n'importe quelle charge. Choisis ta localisation, renseigne tes appareils : chaque résultat affiche sa formule et son calcul."),
+                React.createElement("div", { className: "flex gap-2 mt-3" },
+                    React.createElement("button", { onClick: () => setService("photovoltaique"), className: "text-xs px-3 py-1.5 rounded-md font-medium", style: { background: service === "photovoltaique" ? C.amber : C.panel2, color: service === "photovoltaique" ? "#0B1721" : C.muted, border: `1px solid ${C.border}`, fontFamily: SANS } }, "\u2600\uFE0F Photovolta\u00EFque (habitat)"),
+                    React.createElement("button", { onClick: () => setService("pompage"), className: "text-xs px-3 py-1.5 rounded-md font-medium", style: { background: service === "pompage" ? C.amber : C.panel2, color: service === "pompage" ? "#0B1721" : C.muted, border: `1px solid ${C.border}`, fontFamily: SANS } }, "\uD83D\uDCA7 Pompage solaire"))),
             React.createElement(Section, { n: "00", title: "Marque & acc\u00E8s", subtitle: "R\u00E9glages pour distribuer ou vendre cet outil.", accent: C.teal },
                 React.createElement("div", { className: "grid sm:grid-cols-2 gap-3 mb-3" },
                     React.createElement(Field, { label: "Nom de la marque / du produit" },
@@ -1180,7 +1244,36 @@ function SolarSizer() {
                     React.createElement(Stat, { icon: Battery, label: "Capacit\u00E9 batterie", value: fmt(calc.battCapTotalAh), unit: "Ah", accent: C.teal }),
                     React.createElement(Stat, { icon: Gauge, label: "R\u00E9gulateur", value: calc.regulator, unit: "A", accent: C.teal }),
                     React.createElement(Stat, { icon: Zap, label: "Onduleur", value: fmt(calc.inverterVA), unit: "VA" }))),
-            React.createElement(Section, { n: "02", title: "Charges \u00E0 alimenter", subtitle: "Ajoute chaque appareil, sa puissance, sa quantit\u00E9 et sa dur\u00E9e d'utilisation quotidienne." },
+            React.createElement(Section, { n: "02", title: service === "pompage" ? "Besoin en eau & pompage" : "Charges à alimenter", subtitle: service === "pompage" ? "Volume d'eau, hauteurs et rendements déterminent l'énergie électrique nécessaire au pompage." : "Ajoute chaque appareil, sa puissance, sa quantité et sa durée d'utilisation quotidienne." }, service === "pompage" ? (React.createElement(React.Fragment, null,
+                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4" },
+                    React.createElement(Field, { label: "Besoin en eau" },
+                        React.createElement(NumInput, { value: pumpWaterM3, onChange: setPumpWaterM3, step: 0.5, suffix: "m\u00B3/j" })),
+                    React.createElement(Field, { label: "Source" },
+                        React.createElement(Select, { value: pumpSourceType, onChange: setPumpSourceType, options: ["forage", "reserve"], labels: ["Forage / puits", "Réserve / bassin en surface"] })),
+                    React.createElement(Field, { label: pumpSourceType === "forage" ? "Profondeur (niveau dynamique)" : "Hauteur d'aspiration" },
+                        React.createElement(NumInput, { value: pumpGeoHeight, onChange: setPumpGeoHeight, step: 1, suffix: "m" })),
+                    React.createElement(Field, { label: "Hauteur de refoulement", hint: "jusqu'au r\u00E9servoir" },
+                        React.createElement(NumInput, { value: pumpRefoulHeight, onChange: setPumpRefoulHeight, step: 1, suffix: "m" }))),
+                React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3" },
+                    React.createElement(Field, { label: "Pertes de charge", hint: "forfait tuyauterie/vannes" },
+                        React.createElement(NumInput, { value: pumpLossPct, onChange: setPumpLossPct, step: 1, suffix: "%" })),
+                    React.createElement(Field, { label: "Rendement pompe" },
+                        React.createElement(NumInput, { value: pumpEfficiency, onChange: setPumpEfficiency, step: 1, suffix: "%" })),
+                    React.createElement(Field, { label: "Rendement variateur/onduleur" },
+                        React.createElement(NumInput, { value: pumpDriveEfficiency, onChange: setPumpDriveEfficiency, step: 1, suffix: "%" })),
+                    React.createElement(Field, { label: "Type d'installation" },
+                        React.createElement(Select, { value: pumpSystemType, onChange: setPumpSystemType, options: ["filSoleil", "batterie"], labels: ["Au fil du soleil (sans batterie)", "Avec batterie"] }))),
+                React.createElement("div", { className: "mt-3 pt-3 flex items-center justify-between", style: { borderTop: `1px dashed ${C.border}` } },
+                    React.createElement("span", { style: { color: C.muted, fontFamily: SANS }, className: "text-xs" },
+                        "HMT calcul\u00E9e : ",
+                        React.createElement("b", { style: { color: C.text } },
+                            fmt(calc.hmt, 1),
+                            " m")),
+                    React.createElement("div", { style: { fontFamily: MONO, color: C.text }, className: "text-sm" },
+                        "Besoin \u00E9lectrique : ",
+                        React.createElement("b", { style: { color: C.amber } },
+                            fmt(calc.dailyEnergyWh),
+                            " Wh/j"))))) : (React.createElement(React.Fragment, null,
                 React.createElement("div", { className: "overflow-x-auto -mx-1" },
                     React.createElement("table", { className: "w-full text-sm min-w-[560px]" },
                         React.createElement("thead", null,
@@ -1216,14 +1309,14 @@ function SolarSizer() {
                         React.createElement("span", { style: { color: C.muted } },
                             " \u00B7 pointe ",
                             fmt(calc.maxInstantW),
-                            " W")))),
+                            " W")))))),
             React.createElement(Section, { n: "03", title: "Param\u00E8tres du syst\u00E8me" },
                 React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4" },
                     React.createElement(Field, { label: "Tension syst\u00E8me" },
                         React.createElement(Select, { value: systemVoltage, onChange: (v) => setSystemVoltage(parseFloat(v)), options: [12, 24, 48] })),
-                    React.createElement(Field, { label: "Autonomie", hint: "jours" },
+                    calc.needsBattery && React.createElement(Field, { label: "Autonomie", hint: "jours" },
                         React.createElement(NumInput, { value: autonomyDays, onChange: setAutonomyDays, step: 0.5 })),
-                    React.createElement(Field, { label: "D\u00E9charge max (DOD)", hint: "50% Pb-acide \u00B7 80% Li-ion" },
+                    calc.needsBattery && React.createElement(Field, { label: "D\u00E9charge max (DOD)", hint: "50% Pb-acide \u00B7 80% Li-ion" },
                         React.createElement(NumInput, { value: dod, onChange: setDod, suffix: "%" })),
                     React.createElement(Field, { label: "Rendement syst\u00E8me", hint: "c\u00E2blage + r\u00E9gulateur + onduleur" },
                         React.createElement(NumInput, { value: efficiency, onChange: setEfficiency, suffix: "%" })),
@@ -1238,9 +1331,9 @@ function SolarSizer() {
                         React.createElement(NumInput, { value: panelWp, onChange: setPanelWp, step: 10, suffix: "Wc" })),
                     React.createElement(Field, { label: "Panneau \u2014 tension nominale" },
                         React.createElement(Select, { value: panelVoltage, onChange: (v) => setPanelVoltage(parseFloat(v)), options: [12, 24] })),
-                    React.createElement(Field, { label: "Batterie \u2014 capacit\u00E9 unitaire" },
+                    calc.needsBattery && React.createElement(Field, { label: "Batterie \u2014 capacit\u00E9 unitaire" },
                         React.createElement(NumInput, { value: batteryAh, onChange: setBatteryAh, step: 10, suffix: "Ah" })),
-                    React.createElement(Field, { label: "Batterie \u2014 tension unitaire" },
+                    calc.needsBattery && React.createElement(Field, { label: "Batterie \u2014 tension unitaire" },
                         React.createElement(Select, { value: batteryVoltage, onChange: (v) => setBatteryVoltage(parseFloat(v)), options: [2, 6, 12] }))),
                 React.createElement("div", { style: { borderTop: `1px dashed ${C.border}` }, className: "grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4 pt-4" },
                     React.createElement(Field, { label: "Isc panneau unitaire", hint: "A \u2014 datasheet" },
@@ -1255,6 +1348,24 @@ function SolarSizer() {
                         React.createElement("label", { className: "flex items-center gap-2 text-xs cursor-pointer h-[34px]", style: { color: C.text, fontFamily: SANS } },
                             React.createElement("input", { type: "checkbox", checked: highLightningRisk, onChange: (e) => setHighLightningRisk(e.target.checked) }),
                             " Oui")))),
+            React.createElement(Section, { n: "03b", title: "Sources d'alimentation & secours", subtitle: "Le solaire est toujours prioritaire. Coche les autres sources disponibles pour pr\u00E9voir l'inverseur de source (ATS)." },
+                React.createElement("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-3" },
+                    React.createElement("div", { className: "rounded-lg p-3 flex items-center gap-2", style: { background: C.panel2, border: `1px solid ${C.border}` } },
+                        React.createElement("input", { type: "checkbox", checked: true, readOnly: true }),
+                        React.createElement("span", { style: { color: C.text, fontFamily: SANS }, className: "text-sm" }, "Solaire (prioritaire)")),
+                    React.createElement("label", { className: "rounded-lg p-3 flex items-center gap-2 cursor-pointer", style: { background: C.panel2, border: `1px solid ${C.border}` } },
+                        React.createElement("input", { type: "checkbox", checked: sourceSBEE, onChange: (e) => setSourceSBEE(e.target.checked) }),
+                        React.createElement("span", { style: { color: C.text, fontFamily: SANS }, className: "text-sm" }, "R\u00E9seau SBEE disponible")),
+                    React.createElement("label", { className: "rounded-lg p-3 flex items-center gap-2 cursor-pointer", style: { background: C.panel2, border: `1px solid ${C.border}` } },
+                        React.createElement("input", { type: "checkbox", checked: sourceGroupe, onChange: (e) => setSourceGroupe(e.target.checked) }),
+                        React.createElement("span", { style: { color: C.text, fontFamily: SANS }, className: "text-sm" }, "Groupe \u00E9lectrog\u00E8ne disponible"))),
+                (sourceSBEE || sourceGroupe) && (React.createElement("div", { className: "mt-3 flex items-start gap-2 text-xs", style: { color: C.teal, fontFamily: SANS } },
+                    React.createElement(Info, { size: 13, className: "mt-0.5 shrink-0" }),
+                    React.createElement("p", null, sourceSBEE && sourceGroupe
+                        ? "3 sources détectées (solaire + SBEE + groupe) → inverseur de source (ATS) 3 voies avec priorité solaire, à ajouter au devis."
+                        : sourceSBEE
+                            ? "2 sources détectées (solaire + SBEE) → inverseur de source (ATS) 2 voies avec priorité solaire, à ajouter au devis."
+                            : "2 sources détectées (solaire + groupe) → inverseur de source (ATS) 2 voies avec priorité solaire, à ajouter au devis.")))),
             !unlocked ? (React.createElement("div", { className: "rounded-xl p-8 text-center mb-6", style: { background: C.panel, border: `1px solid ${C.border}` } },
                 React.createElement(Lock, { size: 22, color: C.amber, className: "mx-auto mb-2" }),
                 React.createElement("p", { style: { color: C.text, fontFamily: SANS }, className: "text-sm font-medium mb-1" }, "R\u00E9sultats d\u00E9taill\u00E9s verrouill\u00E9s"),
